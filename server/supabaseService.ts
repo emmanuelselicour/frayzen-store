@@ -46,20 +46,52 @@ export const fetchProductsFromSupabase = async (): Promise<Product[]> => {
         .from('products')
         .select('*')
         .order('created_at', { ascending: false });
+
       if (data && data.length > 0 && !error) {
-        return data.map((p: any) => ({
-          id: p.id,
-          name: p.name,
-          category: (p.category as ProductCategory) || 'free_fire',
-          priceHTG: Number(p.price_htg ?? p.priceHTG),
-          diamonds: p.diamonds ? Number(p.diamonds) : undefined,
-          bonusDiamonds: p.bonus_diamonds ? Number(p.bonus_diamonds) : (p.bonusDiamonds ? Number(p.bonusDiamonds) : undefined),
-          image: p.image,
-          description: p.description,
-          stock: Number(p.stock ?? 0),
-          isPopular: Boolean(p.is_popular ?? p.isPopular),
-          pinCodes: Array.isArray(p.pin_codes) ? p.pin_codes : (Array.isArray(p.pinCodes) ? p.pinCodes : [])
-        }));
+        const mappedProducts = data.map((p: any) => {
+          const initMatch = INITIAL_PRODUCTS.find(i => i.id === p.id || i.name === p.name);
+          const rawPrice = p.price_htg ?? p.priceHTG ?? p.price_HTG ?? p.price ?? p.amount ?? p.cost;
+          const numPrice = Number(rawPrice);
+          const finalPrice = (!isNaN(numPrice) && numPrice > 0)
+            ? numPrice
+            : (initMatch?.priceHTG && initMatch.priceHTG > 0 ? initMatch.priceHTG : 0);
+
+          const productObj: Product = {
+            id: p.id || initMatch?.id || `prod-${Date.now()}`,
+            name: p.name || initMatch?.name || 'Produit',
+            category: (p.category as ProductCategory) || initMatch?.category || 'free_fire',
+            priceHTG: finalPrice,
+            diamonds: p.diamonds ? Number(p.diamonds) : initMatch?.diamonds,
+            bonusDiamonds: p.bonus_diamonds ? Number(p.bonus_diamonds) : (p.bonusDiamonds ? Number(p.bonusDiamonds) : initMatch?.bonusDiamonds),
+            image: p.image || initMatch?.image,
+            description: p.description || initMatch?.description,
+            stock: p.stock !== undefined && p.stock !== null ? Number(p.stock) : (initMatch?.stock ?? 100),
+            isPopular: p.is_popular !== undefined && p.is_popular !== null ? Boolean(p.is_popular) : Boolean(p.isPopular ?? initMatch?.isPopular),
+            pinCodes: Array.isArray(p.pin_codes) ? p.pin_codes : (Array.isArray(p.pinCodes) ? p.pinCodes : (initMatch?.pinCodes || []))
+          };
+
+          // Auto-heal DB row if price was missing or 0 in Supabase
+          if ((p.price_htg === null || p.price_htg === undefined || Number(p.price_htg) <= 0) && finalPrice > 0) {
+            syncProductToSupabase(productObj).catch(() => {});
+          }
+
+          return productObj;
+        });
+
+        // Ensure all default initial products exist
+        for (const initP of INITIAL_PRODUCTS) {
+          if (!mappedProducts.some(mp => mp.id === initP.id || mp.name === initP.name)) {
+            mappedProducts.push(initP);
+            syncProductToSupabase(initP).catch(() => {});
+          }
+        }
+
+        return mappedProducts;
+      } else if (error || !data || data.length === 0) {
+        // Auto-seed INITIAL_PRODUCTS if table is empty
+        for (const initP of INITIAL_PRODUCTS) {
+          syncProductToSupabase(initP).catch(() => {});
+        }
       }
     } catch (err) {
       console.warn('[Supabase] Erreur lecture table products:', err);
@@ -142,7 +174,7 @@ export const fetchOrdersFromSupabase = async (email?: string): Promise<Order[]> 
           userName: o.user_name || o.userName,
           productId: o.product_id || o.productId,
           productName: o.product_name || o.productName,
-          priceHTG: Number(o.price_htg ?? o.priceHTG),
+          priceHTG: Number(o.price_htg ?? o.priceHTG ?? o.price ?? 0),
           gamePlayerId: o.game_player_id || o.gamePlayerId,
           paymentMethod: o.payment_method || o.paymentMethod,
           natcashTransactionId: o.natcash_transaction_id || o.natcashTransactionId,
