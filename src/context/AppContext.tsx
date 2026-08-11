@@ -180,14 +180,16 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         if (resOrd.ok) setOrders(await resOrd.json());
       }
 
-      // Fetch admin stats if user is admin
-      if (user?.isAdmin) {
+      // Always fetch admin stats and contact tickets
+      try {
         const resStats = await fetch('/api/admin/stats');
         if (resStats.ok) setAdminStats(await resStats.json());
+      } catch { /* silent */ }
 
+      try {
         const resTkt = await fetch('/api/contact');
         if (resTkt.ok) setTickets(await resTkt.json());
-      }
+      } catch { /* silent */ }
     } catch (e) {
       console.error('Data refresh error:', e);
     }

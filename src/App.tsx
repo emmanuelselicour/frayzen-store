@@ -20,6 +20,7 @@ import { CheckCircle2, AlertCircle, Info, X } from 'lucide-react';
 
 const MainContent: React.FC = () => {
   const { activeTab, notification, setNotification } = useApp();
+  const isAdminView = activeTab === 'admin';
 
   return (
     <div className="min-h-screen flex flex-col bg-black text-slate-100 font-sans relative selection:bg-[#1E90FF] selection:text-white overflow-x-hidden">
@@ -52,11 +53,11 @@ const MainContent: React.FC = () => {
         </div>
       )}
 
-      {/* Global Header */}
-      <Header />
+      {/* Global Header (Hidden on Admin Panel only) */}
+      {!isAdminView && <Header />}
 
       {/* Dynamic View Body with Scroll & Page Transition Animations */}
-      <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 pt-24 sm:pt-28 pb-12 relative z-10">
+      <main className={`flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 ${isAdminView ? 'pt-4 sm:pt-6 pb-6' : 'pt-24 sm:pt-28 pb-12'} relative z-10`}>
         <AnimatePresence mode="wait">
           <motion.div
             key={activeTab}
@@ -79,8 +80,8 @@ const MainContent: React.FC = () => {
         </AnimatePresence>
       </main>
 
-      {/* Global Footer */}
-      <Footer />
+      {/* Global Footer (Hidden on Admin Panel only) */}
+      {!isAdminView && <Footer />}
 
       {/* Global Modals */}
       <AuthModal />

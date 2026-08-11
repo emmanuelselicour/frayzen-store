@@ -14,8 +14,24 @@ export const AdminDashboard: React.FC = () => {
     tickets,
     adminStats,
     refreshData,
-    showToast
+    showToast,
+    setActiveTab
   } = useApp();
+
+  const [isRefreshing, setIsRefreshing] = useState(false);
+
+  const handleManualRefresh = async () => {
+    setIsRefreshing(true);
+    try {
+      await refreshData();
+      await fetchUsersDetailed();
+      showToast('Toutes les données ont été actualisées avec succès !', 'success');
+    } catch {
+      showToast('Erreur lors de l\'actualisation des données.', 'error');
+    } finally {
+      setIsRefreshing(false);
+    }
+  };
 
   // Admin PIN Gate State
   const [isAdminUnlocked, setIsAdminUnlocked] = useState<boolean>(() => {
@@ -491,7 +507,15 @@ export const AdminDashboard: React.FC = () => {
             </div>
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              onClick={() => setActiveTab('accueil')}
+              className="px-3.5 py-2 rounded-xl bg-blue-600/20 hover:bg-blue-600 text-[#1E90FF] hover:text-white font-bold text-xs flex items-center gap-1.5 border border-blue-500/30 transition-all shadow-sm"
+              title="Retourner au site principal"
+            >
+              <ArrowLeft className="w-3.5 h-3.5" /> Retour au Site
+            </button>
+
             <button
               onClick={() => {
                 setIsAdminUnlocked(false);
@@ -504,14 +528,12 @@ export const AdminDashboard: React.FC = () => {
             </button>
 
             <button
-              onClick={() => {
-                refreshData();
-                fetchUsersDetailed();
-              }}
+              onClick={handleManualRefresh}
+              disabled={isRefreshing}
               className="px-4 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 text-white font-bold text-xs flex items-center gap-2 border border-slate-700 shadow-sm transition-colors"
             >
-              <RefreshCw className="w-4 h-4 text-[#1E90FF]" />
-              Actualiser Données
+              <RefreshCw className={`w-4 h-4 text-[#1E90FF] ${isRefreshing ? 'animate-spin' : ''}`} />
+              {isRefreshing ? 'Actualisation...' : 'Actualiser Données'}
             </button>
           </div>
         </div>
@@ -627,10 +649,11 @@ export const AdminDashboard: React.FC = () => {
                   </p>
                 </div>
                 <button
-                  onClick={() => refreshData()}
+                  onClick={handleManualRefresh}
+                  disabled={isRefreshing}
                   className="px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold text-xs flex items-center gap-1.5 shadow-sm"
                 >
-                  <RefreshCw className="w-3.5 h-3.5 text-[#1E90FF]" /> Actualiser
+                  <RefreshCw className={`w-3.5 h-3.5 text-[#1E90FF] ${isRefreshing ? 'animate-spin' : ''}`} /> Actualiser
                 </button>
               </div>
 
@@ -1549,10 +1572,11 @@ export const AdminDashboard: React.FC = () => {
                   </p>
                 </div>
                 <button
-                  onClick={() => refreshData()}
+                  onClick={handleManualRefresh}
+                  disabled={isRefreshing}
                   className="px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold text-xs flex items-center gap-1.5 self-start sm:self-auto"
                 >
-                  <RefreshCw className="w-3.5 h-3.5 text-[#1E90FF]" /> Actualiser
+                  <RefreshCw className={`w-3.5 h-3.5 text-[#1E90FF] ${isRefreshing ? 'animate-spin' : ''}`} /> Actualiser
                 </button>
               </div>
 
