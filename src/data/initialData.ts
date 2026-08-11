@@ -1,0 +1,117 @@
+import { Product, NatcashConfig, WalletDeposit, Order, ContactTicket } from '../types';
+
+export const INITIAL_PRODUCTS: Product[] = [
+  {
+    id: 'ff-100',
+    name: '💎 100 + Bonus 10',
+    category: 'free_fire',
+    priceHTG: 145,
+    diamonds: 100,
+    bonusDiamonds: 10,
+    image: 'https://images.unsplash.com/photo-1542751371-adc38448a05e?auto=format&fit=crop&w=600&q=80',
+    description: 'Top Up par ID Free Fire - Livré à l\'instant',
+    stock: 100,
+    isPopular: false
+  },
+  {
+    id: 'ff-200',
+    name: '💎 200 + Bonus 20',
+    category: 'free_fire',
+    priceHTG: 390,
+    diamonds: 200,
+    bonusDiamonds: 20,
+    image: 'https://images.unsplash.com/photo-1542751371-adc38448a05e?auto=format&fit=crop&w=600&q=80',
+    description: 'Top Up par ID Free Fire - Livré à l\'instant',
+    stock: 100,
+    isPopular: false
+  },
+  {
+    id: 'ff-300',
+    name: '💎 300 + Bonus 41',
+    category: 'free_fire',
+    priceHTG: 470,
+    diamonds: 300,
+    bonusDiamonds: 41,
+    image: 'https://images.unsplash.com/photo-1542751371-adc38448a05e?auto=format&fit=crop&w=600&q=80',
+    description: 'Top Up par ID Free Fire - Livré à l\'instant',
+    stock: 100,
+    isPopular: true
+  },
+  {
+    id: 'ff-400',
+    name: '💎 400',
+    category: 'free_fire',
+    priceHTG: 615,
+    diamonds: 400,
+    bonusDiamonds: 0,
+    image: 'https://images.unsplash.com/photo-1542751371-adc38448a05e?auto=format&fit=crop&w=600&q=80',
+    description: 'Top Up par ID Free Fire - Livré à l\'instant',
+    stock: 100,
+    isPopular: false
+  },
+  {
+    id: 'ff-500',
+    name: '💎 500 + Bonus 72',
+    category: 'free_fire',
+    priceHTG: 745,
+    diamonds: 500,
+    bonusDiamonds: 72,
+    image: 'https://images.unsplash.com/photo-1542751371-adc38448a05e?auto=format&fit=crop&w=600&q=80',
+    description: 'Top Up par ID Free Fire - Livré à l\'instant',
+    stock: 100,
+    isPopular: true
+  },
+  {
+    id: 'ff-1000',
+    name: '💎 1000 + Bonus 166',
+    category: 'free_fire',
+    priceHTG: 1495,
+    diamonds: 1000,
+    bonusDiamonds: 166,
+    image: 'https://images.unsplash.com/photo-1542751371-adc38448a05e?auto=format&fit=crop&w=600&q=80',
+    description: 'Top Up par ID Free Fire - Livré à l\'instant',
+    stock: 100,
+    isPopular: false
+  },
+  {
+    id: 'ff-2000',
+    name: '💎 2000 + Bonus 398',
+    category: 'free_fire',
+    priceHTG: 2895,
+    diamonds: 2000,
+    bonusDiamonds: 398,
+    image: 'https://images.unsplash.com/photo-1542751371-adc38448a05e?auto=format&fit=crop&w=600&q=80',
+    description: 'Top Up par ID Free Fire - Livré à l\'instant',
+    stock: 100,
+    isPopular: false
+  },
+  {
+    id: 'ff-5000',
+    name: '💎 5000 + Bonus 1160',
+    category: 'free_fire',
+    priceHTG: 7495,
+    diamonds: 5000,
+    bonusDiamonds: 1160,
+    image: 'https://images.unsplash.com/photo-1542751371-adc38448a05e?auto=format&fit=crop&w=600&q=80',
+    description: 'Top Up par ID Free Fire - Livré à l\'instant',
+    stock: 100,
+    isPopular: true
+  }
+];
+
+export const INITIAL_NATCASH_CONFIG: NatcashConfig = {
+  number: '41355116',
+  name: 'HENRY',
+  moncashNumber: '47124969',
+  moncashName: 'JOSELYNE TITY',
+  instructions: 'Envoyez le montant exact sur NATCASH ou MonCash ci-dessus. Copiez ensuite votre code de transaction à 14 chiffres ou téléversez la capture d\'écran.',
+  supportPhone: '+509 4135 5116',
+  supportEmail: 'contact@frayzenshop.com',
+  adminPin: '123456'
+};
+
+export const INITIAL_DEPOSITS: WalletDeposit[] = [];
+
+export const INITIAL_ORDERS: Order[] = [];
+
+export const INITIAL_TICKETS: ContactTicket[] = [];
