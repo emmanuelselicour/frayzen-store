@@ -320,7 +320,7 @@ app.post('/api/auth/login', async (req, res) => {
     }
 
     const query = String(emailOrPhone).toLowerCase().trim();
-    const allUsers = await fetchUsersFromSupabase();
+    const allUsers = await fetchUsersFromSupabase(users);
     let user = allUsers.find(u => u.email.toLowerCase() === query || u.phone.toLowerCase() === query);
 
     if (!user) {
@@ -351,7 +351,7 @@ app.post('/api/auth/register', async (req, res) => {
     const normalizedEmail = String(email).toLowerCase().trim();
     const normalizedPhone = String(phone).trim();
 
-    const allUsers = await fetchUsersFromSupabase();
+    const allUsers = await fetchUsersFromSupabase(users);
     let existingUser = allUsers.find(u => u.email.toLowerCase() === normalizedEmail || (normalizedPhone && u.phone.trim() === normalizedPhone));
 
     if (existingUser) {
@@ -395,7 +395,7 @@ app.post('/api/auth/register', async (req, res) => {
 app.post('/api/auth/verify-email', async (req, res) => {
   try {
     const { email } = req.body || {};
-    const allUsers = await fetchUsersFromSupabase();
+    const allUsers = await fetchUsersFromSupabase(users);
     const user = allUsers.find(u => u.email.toLowerCase() === String(email).toLowerCase().trim());
     if (!user) {
       return res.status(404).json({ error: 'Utilisateur introuvable.' });
@@ -413,7 +413,7 @@ app.post('/api/auth/verify-email', async (req, res) => {
 app.get('/api/user/profile/:email', async (req, res) => {
   try {
     const { email } = req.params;
-    const allUsers = await fetchUsersFromSupabase();
+    const allUsers = await fetchUsersFromSupabase(users);
     const user = allUsers.find(u => u.email.toLowerCase() === String(email).toLowerCase().trim());
     if (!user) {
       return res.status(404).json({ error: 'Utilisateur non trouvé.' });
@@ -442,7 +442,7 @@ app.get('/api/user/profile/:email', async (req, res) => {
 
 app.get('/api/users', async (req, res) => {
   try {
-    const allUsers = await fetchUsersFromSupabase();
+    const allUsers = await fetchUsersFromSupabase(users);
     res.json(allUsers);
   } catch (err: any) {
     console.error('Error in /api/users:', err);
@@ -452,7 +452,7 @@ app.get('/api/users', async (req, res) => {
 
 app.get('/api/admin/users-detailed', async (req, res) => {
   try {
-    const allUsers = await fetchUsersFromSupabase();
+    const allUsers = await fetchUsersFromSupabase(users);
     const allOrders = await fetchOrdersFromSupabase();
 
     const detailedUsers = allUsers.map(u => {
@@ -507,11 +507,11 @@ app.post('/api/wallet/deposit', async (req, res) => {
 
     if (duplicateTx) {
       return res.status(400).json({
-        error: `SÉCURITÉ : Ce code de transaction (${cleanedTxId}) a déjà été utilisé par un autre dépôt le ${new Date(duplicateTx.createdAt).toLocaleDateString('fr-FR')}. Les doublons de transaction sont strictement rejetés par FRAYZEN SHOP.`
+        error: `SÉCURITÉ : Ce code de transaction (${cleanedTxId}) a déjà été utilisé par un autre dépôt le ${new Date(duplicateTx.createdAt).toLocaleDateString('fr-FR')}. Les doublons de transaction sont strictly rejetés par FRAYZEN SHOP.`
       });
     }
 
-    const allUsers = await fetchUsersFromSupabase();
+    const allUsers = await fetchUsersFromSupabase(users);
     const user = allUsers.find(u => u.email.toLowerCase() === String(userEmail).toLowerCase().trim());
 
     const newDeposit: WalletDeposit = {
@@ -568,7 +568,7 @@ app.put('/api/wallet/deposits/:id', async (req, res) => {
     deposit.status = status as 'en_attente' | 'valide' | 'rejete';
     deposit.adminNote = adminNote || deposit.adminNote;
 
-    const allUsers = await fetchUsersFromSupabase();
+    const allUsers = await fetchUsersFromSupabase(users);
     const user = allUsers.find(u => u.email.toLowerCase() === deposit.userEmail.toLowerCase());
 
     if (user) {
@@ -594,7 +594,7 @@ app.put('/api/wallet/deposits/:id', async (req, res) => {
 app.post('/api/wallet/adjust', async (req, res) => {
   try {
     const { userEmail, amountHTG, type } = req.body || {};
-    const allUsers = await fetchUsersFromSupabase();
+    const allUsers = await fetchUsersFromSupabase(users);
     const user = allUsers.find(u => u.email.toLowerCase() === String(userEmail).toLowerCase().trim());
 
     if (!user) {
@@ -632,7 +632,7 @@ app.post('/api/orders', async (req, res) => {
       return res.status(404).json({ error: 'Produit non trouvé.' });
     }
 
-    const allUsers = await fetchUsersFromSupabase();
+    const allUsers = await fetchUsersFromSupabase(users);
     const user = allUsers.find(u => u.email.toLowerCase() === String(userEmail).toLowerCase().trim());
     if (!user) {
       return res.status(400).json({ error: 'Veuillez vous connecter avant d\'effectuer une commande.' });
@@ -847,7 +847,7 @@ app.put('/api/contact/:id', async (req, res) => {
 app.get('/api/admin/stats', async (req, res) => {
   try {
     const allOrders = await fetchOrdersFromSupabase();
-    const allUsers = await fetchUsersFromSupabase();
+    const allUsers = await fetchUsersFromSupabase(users);
     const allDeposits = await fetchDepositsFromSupabase();
     const allTickets = await fetchTicketsFromSupabase();
 

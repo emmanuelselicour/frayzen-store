@@ -158,39 +158,96 @@ export const fetchOrdersFromSupabase = async (email?: string): Promise<Order[]> 
   return [];
 };
 
-export const fetchUsersFromSupabase = async (): Promise<UserProfile[]> => {
-  if (supabaseAdmin) {
-    try {
-      const { data, error } = await supabaseAdmin.from('users').select('*').order('created_at', { ascending: false });
-      if (data && !error && data.length > 0) {
-        const ADMIN_EMAILS = ['emmanuelselicour.2002@gmail.com', 'emmanuel@gmail.com', 'danyff455@gmail.com'];
-        return data.map((u: any) => ({
-          id: u.id,
-          name: u.name,
-          email: u.email,
-          phone: u.phone,
-          createdAt: u.created_at || u.createdAt,
-          isEmailVerified: Boolean(u.is_email_verified ?? u.isEmailVerified),
-          walletBalanceHTG: Number(u.wallet_balance_htg ?? u.walletBalanceHTG ?? 0),
-          isAdmin: Boolean(u.is_admin ?? u.isAdmin ?? ADMIN_EMAILS.includes((u.email || '').toLowerCase()))
-        }));
+export const fetchUsersFromSupabase = async (fallbackUsers: UserProfile[] = []): Promise<UserProfile[]> => {
+  const usersMap = new Map<string, UserProfile>();
+  const ADMIN_EMAILS = ['emmanuelselicour.2002@gmail.com', 'emmanuel@gmail.com', 'danyff455@gmail.com'];
+
+  // 1. Core Default Admin
+  const defaultAdmin: UserProfile = {
+    id: 'usr-admin',
+    name: 'Emmanuel Selicour',
+    email: 'emmanuel@gmail.com',
+    phone: '50941355116',
+    createdAt: new Date().toISOString(),
+    isEmailVerified: true,
+    walletBalanceHTG: 0,
+    isAdmin: true
+  };
+  usersMap.set(defaultAdmin.email.toLowerCase(), defaultAdmin);
+
+  // 2. Local memory fallback users
+  if (Array.isArray(fallbackUsers)) {
+    for (const u of fallbackUsers) {
+      if (u && u.email) {
+        const key = String(u.email).toLowerCase().trim();
+        usersMap.set(key, {
+          ...u,
+          email: key,
+          walletBalanceHTG: Number(u.walletBalanceHTG ?? 0),
+          isAdmin: Boolean(u.isAdmin || ADMIN_EMAILS.includes(key))
+        });
       }
-    } catch (err) {
-      console.warn('[Supabase] Erreur lecture users:', err);
     }
   }
-  return [
-    {
-      id: 'usr-admin',
-      name: 'Emmanuel Selicour',
-      email: 'emmanuel@gmail.com',
-      phone: '50941355116',
-      createdAt: new Date().toISOString(),
-      isEmailVerified: true,
-      walletBalanceHTG: 0,
-      isAdmin: true
+
+  // 3. Query Supabase
+  if (supabaseAdmin) {
+    // 3a. Query Supabase Auth Users
+    try {
+      const { data: authData, error: authErr } = await supabaseAdmin.auth.admin.listUsers();
+      if (authData && authData.users && Array.isArray(authData.users) && !authErr) {
+        for (const au of authData.users) {
+          if (au.email) {
+            const key = String(au.email).toLowerCase().trim();
+            const existing = usersMap.get(key);
+            const name = au.user_metadata?.full_name || au.user_metadata?.name || existing?.name || key.split('@')[0];
+            const phone = au.user_metadata?.phone || existing?.phone || '';
+            const createdAt = au.created_at || existing?.createdAt || new Date().toISOString();
+
+            usersMap.set(key, {
+              id: existing?.id || au.id || `usr-${Date.now()}`,
+              name,
+              email: key,
+              phone,
+              createdAt,
+              isEmailVerified: Boolean(au.email_confirmed_at || existing?.isEmailVerified || true),
+              walletBalanceHTG: Number(existing?.walletBalanceHTG ?? 0),
+              isAdmin: Boolean(existing?.isAdmin || ADMIN_EMAILS.includes(key))
+            });
+          }
+        }
+      }
+    } catch (err) {
+      console.warn('[Supabase Auth List Warning]:', err);
     }
-  ];
+
+    // 3b. Query Supabase DB 'users' Table
+    try {
+      const { data: dbData, error: dbErr } = await supabaseAdmin.from('users').select('*').order('created_at', { ascending: false });
+      if (dbData && Array.isArray(dbData) && !dbErr) {
+        for (const u of dbData) {
+          if (u.email) {
+            const key = String(u.email).toLowerCase().trim();
+            const existing = usersMap.get(key);
+            usersMap.set(key, {
+              id: u.id || existing?.id || `usr-${Date.now()}`,
+              name: u.name || existing?.name || key.split('@')[0],
+              email: key,
+              phone: u.phone || existing?.phone || '',
+              createdAt: u.created_at || u.createdAt || existing?.createdAt || new Date().toISOString(),
+              isEmailVerified: Boolean(u.is_email_verified ?? u.isEmailVerified ?? existing?.isEmailVerified ?? true),
+              walletBalanceHTG: Number(u.wallet_balance_htg ?? u.walletBalanceHTG ?? existing?.walletBalanceHTG ?? 0),
+              isAdmin: Boolean(u.is_admin ?? u.isAdmin ?? existing?.isAdmin ?? ADMIN_EMAILS.includes(key))
+            });
+          }
+        }
+      }
+    } catch (err) {
+      console.warn('[Supabase DB Users Warning]:', err);
+    }
+  }
+
+  return Array.from(usersMap.values());
 };
 
 export const fetchTicketsFromSupabase = async (): Promise<ContactTicket[]> => {
