@@ -15,6 +15,7 @@ import { Profil } from './pages/Profil';
 import { AdminDashboard } from './pages/AdminDashboard';
 import { RedeemPins } from './pages/RedeemPins';
 import { MesCommandes } from './pages/MesCommandes';
+import { Faq } from './pages/Faq';
 import { CheckCircle2, AlertCircle, Info, X } from 'lucide-react';
 
 const MainContent: React.FC = () => {
@@ -73,6 +74,7 @@ const MainContent: React.FC = () => {
             {activeTab === 'commandes' && <MesCommandes />}
             {activeTab === 'admin' && <AdminDashboard />}
             {activeTab === 'redeempins' && <RedeemPins />}
+            {activeTab === 'faq' && <Faq />}
           </motion.div>
         </AnimatePresence>
       </main>

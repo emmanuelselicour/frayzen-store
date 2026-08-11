@@ -79,6 +79,10 @@ export const fetchProductsFromSupabase = async (): Promise<Product[]> => {
           const finalDiamonds = numDiamonds || initMatch?.diamonds;
           const finalBonus = p.bonus_diamonds ? Number(p.bonus_diamonds) : (p.bonusDiamonds ? Number(p.bonusDiamonds) : initMatch?.bonusDiamonds);
 
+          const allowedMethods = Array.isArray(p.allowed_payment_methods)
+            ? p.allowed_payment_methods
+            : (Array.isArray(p.allowedPaymentMethods) ? p.allowedPaymentMethods : (initMatch?.allowedPaymentMethods || (p.category === 'free_fire' || initMatch?.category === 'free_fire' ? ['wallet'] : ['wallet', 'moncash', 'natcash'])));
+
           const productObj: Product = {
             id: p.id || initMatch?.id || `prod-${idx}`,
             name: finalName,
@@ -90,7 +94,8 @@ export const fetchProductsFromSupabase = async (): Promise<Product[]> => {
             description: (p.description && p.description !== 'Produit' && p.description.trim() !== '') ? p.description : (initMatch?.description || 'Top Up par ID Free Fire - Livré à l\'instant'),
             stock: p.stock !== undefined && p.stock !== null ? Number(p.stock) : (initMatch?.stock ?? 100),
             isPopular: p.is_popular !== undefined && p.is_popular !== null ? Boolean(p.is_popular) : Boolean(p.isPopular ?? initMatch?.isPopular),
-            pinCodes: Array.isArray(p.pin_codes) ? p.pin_codes : (Array.isArray(p.pinCodes) ? p.pinCodes : (initMatch?.pinCodes || []))
+            pinCodes: Array.isArray(p.pin_codes) ? p.pin_codes : (Array.isArray(p.pinCodes) ? p.pinCodes : (initMatch?.pinCodes || [])),
+            allowedPaymentMethods: allowedMethods
           };
 
           return { prod: productObj, originalId: String(p.id || ''), rawName: rawNameStr };
@@ -372,28 +377,41 @@ export const fetchUsersFromSupabase = async (fallbackUsers: UserProfile[] = []):
   return Array.from(usersMap.values());
 };
 
-export const fetchTicketsFromSupabase = async (): Promise<ContactTicket[]> => {
+export const fetchTicketsFromSupabase = async (fallbackTickets: ContactTicket[] = []): Promise<ContactTicket[]> => {
+  const ticketsMap = new Map<string, ContactTicket>();
+
+  if (Array.isArray(fallbackTickets)) {
+    for (const t of fallbackTickets) {
+      if (t && t.id) {
+        ticketsMap.set(t.id, t);
+      }
+    }
+  }
+
   if (supabaseAdmin) {
     try {
       const { data, error } = await supabaseAdmin.from('tickets').select('*').order('created_at', { ascending: false });
-      if (data && !error) {
-        return data.map((t: any) => ({
-          id: t.id,
-          userId: t.user_id || t.userId,
-          userName: t.user_name || t.userName,
-          userEmail: t.user_email || t.userEmail,
-          userPhone: t.user_phone || t.userPhone,
-          subject: t.subject,
-          message: t.message,
-          status: t.status,
-          createdAt: t.created_at || t.createdAt
-        }));
+      if (data && !error && Array.isArray(data)) {
+        for (const t of data) {
+          ticketsMap.set(t.id, {
+            id: t.id,
+            userId: t.user_id || t.userId,
+            userName: t.user_name || t.userName,
+            userEmail: t.user_email || t.userEmail,
+            userPhone: t.user_phone || t.userPhone,
+            subject: t.subject,
+            message: t.message,
+            status: t.status || 'nouveau',
+            createdAt: t.created_at || t.createdAt
+          });
+        }
       }
     } catch (err) {
       console.warn('[Supabase] Erreur lecture tickets:', err);
     }
   }
-  return [];
+
+  return Array.from(ticketsMap.values()).sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
 };
 
 // ============================================================================
@@ -464,7 +482,8 @@ export const syncProductToSupabase = async (product: Product) => {
       description: product.description,
       stock: product.stock,
       is_popular: product.isPopular,
-      pin_codes: product.pinCodes || []
+      pin_codes: product.pinCodes || [],
+      allowed_payment_methods: product.allowedPaymentMethods || (product.category === 'free_fire' ? ['wallet'] : ['wallet', 'moncash', 'natcash'])
     }, { onConflict: 'id' });
   } catch (err) {
     console.error('[Supabase] Erreur sync product:', err);

@@ -28,6 +28,23 @@ export const Paiement: React.FC = () => {
 
   const activeProduct = selectedProduct || currentProduct;
 
+  const allowedMethods = activeProduct?.allowedPaymentMethods && activeProduct.allowedPaymentMethods.length > 0
+    ? activeProduct.allowedPaymentMethods
+    : (activeProduct?.category === 'free_fire' ? ['wallet'] : ['wallet', 'moncash', 'natcash']);
+
+  React.useEffect(() => {
+    if (allowedMethods && allowedMethods.length > 0) {
+      if (paymentMethod === 'natcash_direct' && !allowedMethods.includes('natcash')) {
+        setPaymentMethod('wallet');
+      } else if (paymentMethod === 'moncash_direct' && !allowedMethods.includes('moncash')) {
+        setPaymentMethod('wallet');
+      } else if (paymentMethod === 'wallet' && !allowedMethods.includes('wallet')) {
+        const first = allowedMethods[0];
+        setPaymentMethod(first === 'natcash' ? 'natcash_direct' : (first === 'moncash' ? 'moncash_direct' : 'wallet'));
+      }
+    }
+  }, [activeProduct, allowedMethods.join(',')]);
+
   if (!activeProduct) {
     return (
       <div className="p-12 text-center glass-card rounded-3xl space-y-4">
@@ -255,66 +272,93 @@ export const Paiement: React.FC = () => {
                   Choisissez le mode de paiement :
                 </label>
 
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                {allowedMethods.length === 1 && allowedMethods[0] === 'wallet' && (
+                  <div className="p-3.5 rounded-2xl bg-blue-500/10 border border-blue-500/30 text-xs text-blue-200 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 shadow-sm">
+                    <div className="flex items-center gap-2.5">
+                      <Wallet className="w-5 h-5 text-[#1E90FF] shrink-0" />
+                      <div>
+                        <p className="font-extrabold text-white">Paiement unique via Solde Wallet</p>
+                        <p className="text-[11px] text-slate-300">Ce produit s'achète uniquement avec le solde de votre portefeuille sur le site.</p>
+                      </div>
+                    </div>
+                    {user && user.walletBalanceHTG < (activeProduct?.priceHTG || 0) && (
+                      <button
+                        type="button"
+                        onClick={() => setIsDepositModalOpen(true)}
+                        className="px-3 py-1.5 rounded-xl bg-[#1E90FF] hover:bg-blue-600 text-white font-extrabold text-xs shadow-md transition-all shrink-0"
+                      >
+                        Recharger Wallet
+                      </button>
+                    )}
+                  </div>
+                )}
+
+                <div className={`grid grid-cols-1 ${allowedMethods.length > 1 ? (allowedMethods.length === 2 ? 'sm:grid-cols-2' : 'sm:grid-cols-3') : ''} gap-3`}>
                   
                   {/* Option 1: Wallet Balance */}
-                  <div
-                    onClick={() => setPaymentMethod('wallet')}
-                    className={`p-3.5 rounded-2xl border cursor-pointer transition-all flex flex-col justify-between space-y-2 ${
-                      paymentMethod === 'wallet'
-                        ? 'bg-blue-950/60 border-[#1E90FF] shadow-md shadow-blue-500/20'
-                        : 'bg-slate-900/80 border-slate-800 hover:bg-slate-800'
-                    }`}
-                  >
-                    <div className="flex items-center justify-between">
-                      <Wallet className="w-5 h-5 text-[#1E90FF]" />
-                      {paymentMethod === 'wallet' && <CheckCircle2 className="w-4 h-4 text-[#1E90FF]" />}
+                  {allowedMethods.includes('wallet') && (
+                    <div
+                      onClick={() => setPaymentMethod('wallet')}
+                      className={`p-3.5 rounded-2xl border cursor-pointer transition-all flex flex-col justify-between space-y-2 ${
+                        paymentMethod === 'wallet'
+                          ? 'bg-blue-950/60 border-[#1E90FF] shadow-md shadow-blue-500/20'
+                          : 'bg-slate-900/80 border-slate-800 hover:bg-slate-800'
+                      }`}
+                    >
+                      <div className="flex items-center justify-between">
+                        <Wallet className="w-5 h-5 text-[#1E90FF]" />
+                        {paymentMethod === 'wallet' && <CheckCircle2 className="w-4 h-4 text-[#1E90FF]" />}
+                      </div>
+                      <div>
+                        <p className="text-xs font-black text-white">Solde Wallet</p>
+                        <p className="text-[10px] text-slate-400">
+                          Dispo: <strong className="text-white">{user ? `${user.walletBalanceHTG} HTG` : '0 HTG'}</strong>
+                        </p>
+                      </div>
                     </div>
-                    <div>
-                      <p className="text-xs font-black text-white">Solde Wallet</p>
-                      <p className="text-[10px] text-slate-400">
-                        Dispo: <strong className="text-white">{user ? `${user.walletBalanceHTG} HTG` : '0 HTG'}</strong>
-                      </p>
-                    </div>
-                  </div>
+                  )}
 
                   {/* Option 2: Direct NATCASH */}
-                  <div
-                    onClick={() => setPaymentMethod('natcash_direct')}
-                    className={`p-3.5 rounded-2xl border cursor-pointer transition-all flex flex-col justify-between space-y-2 ${
-                      paymentMethod === 'natcash_direct'
-                        ? 'bg-orange-950/60 border-[#FF6321] shadow-md shadow-orange-500/20'
-                        : 'bg-slate-900/80 border-slate-800 hover:bg-slate-800'
-                    }`}
-                  >
-                    <div className="flex items-center justify-between">
-                      <Smartphone className="w-5 h-5 text-[#FF6321]" />
-                      {paymentMethod === 'natcash_direct' && <CheckCircle2 className="w-4 h-4 text-[#FF6321]" />}
+                  {allowedMethods.includes('natcash') && (
+                    <div
+                      onClick={() => setPaymentMethod('natcash_direct')}
+                      className={`p-3.5 rounded-2xl border cursor-pointer transition-all flex flex-col justify-between space-y-2 ${
+                        paymentMethod === 'natcash_direct'
+                          ? 'bg-orange-950/60 border-[#FF6321] shadow-md shadow-orange-500/20'
+                          : 'bg-slate-900/80 border-slate-800 hover:bg-slate-800'
+                      }`}
+                    >
+                      <div className="flex items-center justify-between">
+                        <Smartphone className="w-5 h-5 text-[#FF6321]" />
+                        {paymentMethod === 'natcash_direct' && <CheckCircle2 className="w-4 h-4 text-[#FF6321]" />}
+                      </div>
+                      <div>
+                        <p className="text-xs font-black text-white">Direct NATCASH</p>
+                        <p className="text-[10px] text-slate-400">N° {natcashConfig.number} ({natcashConfig.name})</p>
+                      </div>
                     </div>
-                    <div>
-                      <p className="text-xs font-black text-white">Direct NATCASH</p>
-                      <p className="text-[10px] text-slate-400">N° {natcashConfig.number} ({natcashConfig.name})</p>
-                    </div>
-                  </div>
+                  )}
 
                   {/* Option 3: Direct MonCash */}
-                  <div
-                    onClick={() => setPaymentMethod('moncash_direct')}
-                    className={`p-3.5 rounded-2xl border cursor-pointer transition-all flex flex-col justify-between space-y-2 ${
-                      paymentMethod === 'moncash_direct'
-                        ? 'bg-red-950/60 border-red-600 shadow-md shadow-red-500/20'
-                        : 'bg-slate-900/80 border-slate-800 hover:bg-slate-800'
-                    }`}
-                  >
-                    <div className="flex items-center justify-between">
-                      <Smartphone className="w-5 h-5 text-red-500" />
-                      {paymentMethod === 'moncash_direct' && <CheckCircle2 className="w-4 h-4 text-red-500" />}
+                  {allowedMethods.includes('moncash') && (
+                    <div
+                      onClick={() => setPaymentMethod('moncash_direct')}
+                      className={`p-3.5 rounded-2xl border cursor-pointer transition-all flex flex-col justify-between space-y-2 ${
+                        paymentMethod === 'moncash_direct'
+                          ? 'bg-red-950/60 border-red-600 shadow-md shadow-red-500/20'
+                          : 'bg-slate-900/80 border-slate-800 hover:bg-slate-800'
+                      }`}
+                    >
+                      <div className="flex items-center justify-between">
+                        <Smartphone className="w-5 h-5 text-red-500" />
+                        {paymentMethod === 'moncash_direct' && <CheckCircle2 className="w-4 h-4 text-red-500" />}
+                      </div>
+                      <div>
+                        <p className="text-xs font-black text-white">Direct MonCash</p>
+                        <p className="text-[10px] text-slate-400">N° {natcashConfig.moncashNumber || '47124969'} ({natcashConfig.moncashName || 'JOSELYNE TITY'})</p>
+                      </div>
                     </div>
-                    <div>
-                      <p className="text-xs font-black text-white">Direct MonCash</p>
-                      <p className="text-[10px] text-slate-400">N° {natcashConfig.moncashNumber || '47124969'} ({natcashConfig.moncashName || 'JOSELYNE TITY'})</p>
-                    </div>
-                  </div>
+                  )}
 
                 </div>
               </div>

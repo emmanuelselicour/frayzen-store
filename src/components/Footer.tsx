@@ -70,6 +70,11 @@ export const Footer: React.FC = () => {
                 </button>
               </li>
               <li>
+                <button onClick={() => setActiveTab('faq')} className="hover:text-[#1E90FF] transition-colors">
+                  Foire Aux Questions (FAQ)
+                </button>
+              </li>
+              <li>
                 <button onClick={() => setActiveTab('contact')} className="hover:text-[#1E90FF] transition-colors">
                   Contact & Support
                 </button>
@@ -129,7 +134,7 @@ export const Footer: React.FC = () => {
           </div>
           <div className="flex items-center gap-2">
             <div className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></div>
-            <span className="font-bold text-slate-300">Serveur Opérationnel</span>
+            <span className="font-bold text-slate-300">Service Actif 24/7</span>
           </div>
         </div>
       </div>

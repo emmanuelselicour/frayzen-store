@@ -204,7 +204,7 @@ app.get('/api/products', async (req, res) => {
 
 app.post('/api/products', async (req, res) => {
   try {
-    const { name, category, priceHTG, diamonds, bonusDiamonds, image, description, stock, isPopular, pinCodes } = req.body || {};
+    const { name, category, priceHTG, diamonds, bonusDiamonds, image, description, stock, isPopular, pinCodes, allowedPaymentMethods } = req.body || {};
     if (!name || !priceHTG || !category) {
       return res.status(400).json({ error: 'Nom, catégorie et prix en HTG sont obligatoires.' });
     }
@@ -220,7 +220,10 @@ app.post('/api/products', async (req, res) => {
       description: description || '',
       stock: Number(stock) || 0,
       isPopular: Boolean(isPopular),
-      pinCodes: Array.isArray(pinCodes) ? pinCodes : []
+      pinCodes: Array.isArray(pinCodes) ? pinCodes : [],
+      allowedPaymentMethods: Array.isArray(allowedPaymentMethods) && allowedPaymentMethods.length > 0
+        ? allowedPaymentMethods
+        : (String(category).trim() === 'free_fire' ? ['wallet'] : ['wallet', 'moncash', 'natcash'])
     };
 
     products.unshift(newProduct);
@@ -819,7 +822,7 @@ app.post('/api/contact', async (req, res) => {
 
 app.get('/api/contact', async (req, res) => {
   try {
-    const tkts = await fetchTicketsFromSupabase();
+    const tkts = await fetchTicketsFromSupabase(tickets);
     res.json(tkts);
   } catch (err: any) {
     console.error('Error in GET /api/contact:', err);
@@ -831,15 +834,30 @@ app.put('/api/contact/:id', async (req, res) => {
   try {
     const { id } = req.params;
     const { status } = req.body || {};
-    const tkts = await fetchTicketsFromSupabase();
+    const tkts = await fetchTicketsFromSupabase(tickets);
     const tkt = tkts.find(t => t.id === id);
     if (!tkt) return res.status(404).json({ error: 'Ticket introuvable.' });
     tkt.status = status;
+    const memIdx = tickets.findIndex(t => t.id === id);
+    if (memIdx !== -1) tickets[memIdx].status = status;
+    saveDataStore();
     await syncTicketToSupabase(tkt);
     res.json(tkt);
   } catch (err: any) {
     console.error('Error in PUT /api/contact/:id:', err);
     res.status(500).json({ error: err?.message || 'Erreur lors de la mise à jour du ticket.' });
+  }
+});
+
+app.delete('/api/contact/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const idx = tickets.findIndex(t => t.id === id);
+    if (idx !== -1) tickets.splice(idx, 1);
+    saveDataStore();
+    res.json({ message: 'Ticket supprimé.' });
+  } catch (err: any) {
+    res.status(500).json({ error: 'Erreur lors de la suppression.' });
   }
 });
 
@@ -849,35 +867,38 @@ app.get('/api/admin/stats', async (req, res) => {
     const allOrders = await fetchOrdersFromSupabase();
     const allUsers = await fetchUsersFromSupabase(users);
     const allDeposits = await fetchDepositsFromSupabase();
-    const allTickets = await fetchTicketsFromSupabase();
+    const allTickets = await fetchTicketsFromSupabase(tickets);
 
     const successfulOrders = allOrders.filter(o => o.status === 'reussi');
     const totalAmountPurchasedHTG = successfulOrders.reduce((acc, o) => acc + o.priceHTG, 0);
 
-    const productSalesMap: Record<string, { name: string; count: number }> = {};
+    const packSalesMap: Record<string, { productName: string; count: number; totalHTG: number }> = {};
     successfulOrders.forEach(o => {
-      if (!productSalesMap[o.productName]) {
-        productSalesMap[o.productName] = { name: o.productName, count: 0 };
+      const pName = o.productName || 'Pack Diamants';
+      if (!packSalesMap[pName]) {
+        packSalesMap[pName] = { productName: pName, count: 0, totalHTG: 0 };
       }
-      productSalesMap[o.productName].count += 1;
+      packSalesMap[pName].count += 1;
+      packSalesMap[pName].totalHTG += o.priceHTG;
     });
+
+    const packSales = Object.values(packSalesMap).sort((a, b) => b.count - a.count);
 
     let topSellingProduct = 'Aucun pour l\'instant';
-    let maxCount = 0;
-    Object.values(productSalesMap).forEach(p => {
-      if (p.count > maxCount) {
-        maxCount = p.count;
-        topSellingProduct = `${p.name} (${p.count} ventes)`;
-      }
-    });
+    if (packSales.length > 0) {
+      topSellingProduct = `${packSales[0].productName} (${packSales[0].count} ventes)`;
+    }
 
-    const buyersMap: Record<string, { userName: string; email: string; totalAmountHTG: number; ordersCount: number }> = {};
+    const buyersMap: Record<string, { userName: string; email: string; totalAmountHTG: number; ordersCount: number; lastOrderDate?: string }> = {};
     successfulOrders.forEach(o => {
       if (!buyersMap[o.userEmail]) {
-        buyersMap[o.userEmail] = { userName: o.userName, email: o.userEmail, totalAmountHTG: 0, ordersCount: 0 };
+        buyersMap[o.userEmail] = { userName: o.userName, email: o.userEmail, totalAmountHTG: 0, ordersCount: 0, lastOrderDate: o.createdAt };
       }
       buyersMap[o.userEmail].totalAmountHTG += o.priceHTG;
       buyersMap[o.userEmail].ordersCount += 1;
+      if (!buyersMap[o.userEmail].lastOrderDate || new Date(o.createdAt).getTime() > new Date(buyersMap[o.userEmail].lastOrderDate!).getTime()) {
+        buyersMap[o.userEmail].lastOrderDate = o.createdAt;
+      }
     });
 
     const topBuyers = Object.values(buyersMap)
@@ -892,6 +913,7 @@ app.get('/api/admin/stats', async (req, res) => {
       totalUsersCount: allUsers.length,
       topSellingProduct,
       topBuyers,
+      packSales,
       totalAmountPurchasedHTG,
       pendingDepositsCount,
       newTicketsCount

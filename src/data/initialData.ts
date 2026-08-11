@@ -11,7 +11,8 @@ export const INITIAL_PRODUCTS: Product[] = [
     image: 'https://images.unsplash.com/photo-1542751371-adc38448a05e?auto=format&fit=crop&w=600&q=80',
     description: 'Top Up par ID Free Fire - Livré à l\'instant',
     stock: 100,
-    isPopular: false
+    isPopular: false,
+    allowedPaymentMethods: ['wallet']
   },
   {
     id: 'ff-200',
@@ -23,7 +24,8 @@ export const INITIAL_PRODUCTS: Product[] = [
     image: 'https://images.unsplash.com/photo-1542751371-adc38448a05e?auto=format&fit=crop&w=600&q=80',
     description: 'Top Up par ID Free Fire - Livré à l\'instant',
     stock: 100,
-    isPopular: false
+    isPopular: false,
+    allowedPaymentMethods: ['wallet']
   },
   {
     id: 'ff-300',
@@ -35,7 +37,8 @@ export const INITIAL_PRODUCTS: Product[] = [
     image: 'https://images.unsplash.com/photo-1542751371-adc38448a05e?auto=format&fit=crop&w=600&q=80',
     description: 'Top Up par ID Free Fire - Livré à l\'instant',
     stock: 100,
-    isPopular: true
+    isPopular: true,
+    allowedPaymentMethods: ['wallet']
   },
   {
     id: 'ff-400',
@@ -47,7 +50,8 @@ export const INITIAL_PRODUCTS: Product[] = [
     image: 'https://images.unsplash.com/photo-1542751371-adc38448a05e?auto=format&fit=crop&w=600&q=80',
     description: 'Top Up par ID Free Fire - Livré à l\'instant',
     stock: 100,
-    isPopular: false
+    isPopular: false,
+    allowedPaymentMethods: ['wallet']
   },
   {
     id: 'ff-500',
@@ -59,7 +63,8 @@ export const INITIAL_PRODUCTS: Product[] = [
     image: 'https://images.unsplash.com/photo-1542751371-adc38448a05e?auto=format&fit=crop&w=600&q=80',
     description: 'Top Up par ID Free Fire - Livré à l\'instant',
     stock: 100,
-    isPopular: true
+    isPopular: true,
+    allowedPaymentMethods: ['wallet']
   },
   {
     id: 'ff-1000',
@@ -71,7 +76,8 @@ export const INITIAL_PRODUCTS: Product[] = [
     image: 'https://images.unsplash.com/photo-1542751371-adc38448a05e?auto=format&fit=crop&w=600&q=80',
     description: 'Top Up par ID Free Fire - Livré à l\'instant',
     stock: 100,
-    isPopular: false
+    isPopular: false,
+    allowedPaymentMethods: ['wallet']
   },
   {
     id: 'ff-2000',
@@ -83,7 +89,8 @@ export const INITIAL_PRODUCTS: Product[] = [
     image: 'https://images.unsplash.com/photo-1542751371-adc38448a05e?auto=format&fit=crop&w=600&q=80',
     description: 'Top Up par ID Free Fire - Livré à l\'instant',
     stock: 100,
-    isPopular: false
+    isPopular: false,
+    allowedPaymentMethods: ['wallet']
   },
   {
     id: 'ff-5000',
@@ -95,7 +102,8 @@ export const INITIAL_PRODUCTS: Product[] = [
     image: 'https://images.unsplash.com/photo-1542751371-adc38448a05e?auto=format&fit=crop&w=600&q=80',
     description: 'Top Up par ID Free Fire - Livré à l\'instant',
     stock: 100,
-    isPopular: true
+    isPopular: true,
+    allowedPaymentMethods: ['wallet']
   }
 ];
 

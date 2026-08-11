@@ -2,7 +2,7 @@ import React, { createContext, useContext, useState, useEffect } from 'react';
 import { Product, NatcashConfig, WalletDeposit, Order, UserProfile, ContactTicket, AdminStats } from '../types';
 import confetti from 'canvas-confetti';
 
-export type TabType = 'accueil' | 'produits' | 'paiement' | 'wallet' | 'commandes' | 'contact' | 'profil' | 'admin' | 'redeempins';
+export type TabType = 'accueil' | 'produits' | 'paiement' | 'wallet' | 'commandes' | 'contact' | 'profil' | 'admin' | 'redeempins' | 'faq';
 
 interface AppContextType {
   activeTab: TabType;
@@ -40,7 +40,7 @@ const AppContext = createContext<AppContextType | undefined>(undefined);
 
 const getInitialTab = (): TabType => {
   const hash = window.location.hash.replace('#', '') as TabType;
-  const validTabs: TabType[] = ['accueil', 'produits', 'paiement', 'wallet', 'commandes', 'contact', 'profil', 'admin', 'redeempins'];
+  const validTabs: TabType[] = ['accueil', 'produits', 'paiement', 'wallet', 'commandes', 'contact', 'profil', 'admin', 'redeempins', 'faq'];
   if (hash && validTabs.includes(hash)) return hash;
   return 'accueil';
 };

@@ -1,5 +1,7 @@
 export type ProductCategory = 'free_fire' | 'passes' | 'mobile_legends' | 'cards';
 
+export type AllowedPaymentMethod = 'wallet' | 'natcash' | 'moncash';
+
 export interface Product {
   id: string;
   name: string;
@@ -12,6 +14,7 @@ export interface Product {
   stock: number;
   isPopular?: boolean;
   pinCodes?: string[];
+  allowedPaymentMethods?: AllowedPaymentMethod[];
 }
 
 export type DepositStatus = 'en_attente' | 'valide' | 'rejete';
@@ -89,11 +92,18 @@ export interface UserDetailedMetrics extends UserProfile {
   failedPurchasesCount: number;
 }
 
+export interface PackSaleStat {
+  productName: string;
+  count: number;
+  totalHTG: number;
+}
+
 export interface AdminStats {
   totalSalesCount: number;
   totalUsersCount: number;
   topSellingProduct: string;
-  topBuyers: { userName: string; email: string; totalAmountHTG: number; ordersCount: number }[];
+  topBuyers: { userName: string; email: string; totalAmountHTG: number; ordersCount: number; lastOrderDate?: string }[];
+  packSales?: PackSaleStat[];
   totalAmountPurchasedHTG: number;
   pendingDepositsCount: number;
   newTicketsCount: number;

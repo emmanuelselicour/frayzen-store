@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useApp, TabType } from '../context/AppContext';
-import { Shield, Wallet, User, Menu, X, ShieldAlert, Sparkles, LogOut, CheckCircle, AlertCircle, ShoppingCart, Gift, ShoppingBag } from 'lucide-react';
+import { Shield, Wallet, User, Menu, X, ShieldAlert, Sparkles, LogOut, CheckCircle, AlertCircle, ShoppingCart, Gift, ShoppingBag, HelpCircle } from 'lucide-react';
 
 export const Header: React.FC = () => {
   const {
@@ -66,6 +66,7 @@ export const Header: React.FC = () => {
     { id: 'commandes', label: 'Mes Commandes', icon: <ShoppingBag className="w-4 h-4 text-[#1E90FF]" /> },
     { id: 'redeempins', label: 'Réclamer PINs', icon: <Gift className="w-4 h-4 text-amber-400" /> },
     { id: 'wallet', label: 'Wallet', icon: <Wallet className="w-4 h-4 text-[#1E90FF]" /> },
+    { id: 'faq', label: 'FAQ', icon: <HelpCircle className="w-4 h-4 text-emerald-400" /> },
     { id: 'contact', label: 'Contact' }
   ];
 

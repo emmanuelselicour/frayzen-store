@@ -219,11 +219,11 @@ export const Accueil: React.FC = () => {
             <div className="space-y-2 text-center md:text-left">
               <div className="flex items-center justify-center md:justify-start gap-2 text-amber-300 font-extrabold text-sm">
                 <Shield className="w-5 h-5" />
-                <span>Garantie de Sécurité Anti-Doublon SQL</span>
+                <span>Paiements & Dépôts 100% Sécurisés</span>
               </div>
-              <h3 className="text-2xl sm:text-3xl font-black">Portefeuille Wallet Sécurisé par NATCASH</h3>
+              <h3 className="text-2xl sm:text-3xl font-black">Portefeuille Wallet Sécurisé par NATCASH & MonCash</h3>
               <p className="text-xs text-blue-100 max-w-xl leading-relaxed">
-                Chaque dépôt d'argent sur votre compte est vérifié par un code inik à 14 chiffres. Aucun doublon n'est toléré par notre algorithme de validation.
+                Rechargez votre solde instantanément en toute tranquillité. Vos dépôts sont immédiatement validés pour des achats de dyamant sans attente.
               </p>
             </div>
 

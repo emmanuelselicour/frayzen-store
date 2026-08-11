@@ -105,8 +105,8 @@ export const Contact: React.FC = () => {
             <div className="text-center py-8 space-y-4">
               <CheckCircle2 className="w-12 h-12 mx-auto text-emerald-400" />
               <h3 className="text-2xl font-black text-white">Message Envoyé !</h3>
-              <p className="text-xs text-slate-400">
-                Votre demande a été soumise avec succès au panneau d'administration FRAYZEN SHOP.
+              <p className="text-xs text-slate-300 font-medium">
+                Nous avons bien reçu votre message, nous vous répondrons dans un court délai sur votre numéro.
               </p>
               <button
                 onClick={() => setSubmittedSuccess(false)}
