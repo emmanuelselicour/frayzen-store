@@ -165,7 +165,7 @@ export const Produits: React.FC = () => {
                   {/* Ligne 2: Prix */}
                   <div className="text-center bg-slate-950/90 py-2 rounded-xl border border-white/5">
                     <span className="text-xs sm:text-sm font-black text-[#1E90FF]">
-                      ➜ {p.priceHTG.toLocaleString('fr-FR')} HTG
+                      ➜ {(p.priceHTG ?? 0).toLocaleString('fr-FR')} HTG
                     </span>
                   </div>
 

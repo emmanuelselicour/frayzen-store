@@ -32,7 +32,7 @@ export const Wallet: React.FC = () => {
                 <span>Solde Disponible</span>
               </div>
               <p className="text-4xl sm:text-5xl font-black text-white tracking-tight">
-                {user ? `${user.walletBalanceHTG.toLocaleString('fr-FR')} HTG` : '0 HTG'}
+                {user ? `${(user.walletBalanceHTG ?? 0).toLocaleString('fr-FR')} HTG` : '0 HTG'}
               </p>
               <p className="text-xs text-emerald-400 font-semibold flex items-center gap-1 pt-1">
                 <ShieldCheck className="w-4 h-4" />
@@ -107,15 +107,15 @@ export const Wallet: React.FC = () => {
                 {deposits.map(dep => (
                   <tr key={dep.id} className="hover:bg-slate-900/60 transition-colors">
                     <td className="py-3.5 px-4 whitespace-nowrap">
-                      {new Date(dep.createdAt).toLocaleDateString('fr-FR', {
+                      {dep.createdAt ? new Date(dep.createdAt).toLocaleDateString('fr-FR', {
                         day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit'
-                      })}
+                      }) : 'N/A'}
                     </td>
                     <td className="py-3.5 px-4 font-mono font-bold text-white tracking-wider">
                       {dep.transactionId14}
                     </td>
                     <td className="py-3.5 px-4 font-extrabold text-[#1E90FF]">
-                      +{dep.amountHTG.toLocaleString('fr-FR')} HTG
+                      +{(dep.amountHTG ?? 0).toLocaleString('fr-FR')} HTG
                     </td>
                     <td className="py-3.5 px-4 whitespace-nowrap">
                       {dep.status === 'valide' && (

@@ -153,7 +153,7 @@ export const Header: React.FC = () => {
               <div>
                 <p className="text-[9px] uppercase tracking-wider text-slate-400 font-bold leading-tight">Wallet</p>
                 <p className="text-xs xl:text-sm font-black text-white group-hover:text-[#1E90FF] transition-colors leading-tight">
-                  {user ? `${user.walletBalanceHTG.toLocaleString('fr-FR')} HTG` : '0 HTG'}
+                  {user ? `${(user.walletBalanceHTG ?? 0).toLocaleString('fr-FR')} HTG` : '0 HTG'}
                 </p>
               </div>
               <button

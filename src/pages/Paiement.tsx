@@ -123,7 +123,7 @@ export const Paiement: React.FC = () => {
               <h4 className="font-extrabold text-white text-base">{activeProduct.name}</h4>
               <p className="text-xs text-slate-400">{activeProduct.description}</p>
               <p className="text-lg font-black text-[#1E90FF] mt-1">
-                {activeProduct.priceHTG.toLocaleString('fr-FR')} HTG
+                {(activeProduct?.priceHTG ?? 0).toLocaleString('fr-FR')} HTG
               </p>
             </div>
           </div>

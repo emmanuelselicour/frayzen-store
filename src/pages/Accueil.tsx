@@ -68,7 +68,7 @@ export const Accueil: React.FC = () => {
               <div className="p-6 rounded-3xl glass-card border border-white/12 shadow-xl space-y-3 text-white">
                 <p className="text-xs font-bold uppercase tracking-widest text-slate-400">Mon Wallet</p>
                 <h2 className="text-3xl font-black text-white">
-                  {user ? user.walletBalanceHTG.toLocaleString('fr-FR') : '0'} <span className="text-sm font-medium text-slate-400">HTG</span>
+                  {user ? (user.walletBalanceHTG ?? 0).toLocaleString('fr-FR') : '0'} <span className="text-sm font-medium text-slate-400">HTG</span>
                 </h2>
                 <button
                   onClick={() => setIsDepositModalOpen(true)}
@@ -148,7 +148,7 @@ export const Accueil: React.FC = () => {
                 {/* Line 2: Price */}
                 <div className="text-center bg-slate-950/90 py-2 rounded-xl border border-white/5">
                   <span className="text-xs sm:text-sm font-black text-[#1E90FF]">
-                    ➜ {p.priceHTG.toLocaleString('fr-FR')} HTG
+                    ➜ {(p.priceHTG ?? 0).toLocaleString('fr-FR')} HTG
                   </span>
                 </div>
 

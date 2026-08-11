@@ -91,9 +91,9 @@ export const Profil: React.FC = () => {
                 <Calendar className="w-4 h-4 text-[#FF0000]" /> Date de Création:
               </span>
               <strong className="text-white">
-                {new Date(user.createdAt).toLocaleDateString('fr-FR', {
+                {user.createdAt ? new Date(user.createdAt).toLocaleDateString('fr-FR', {
                   day: '2-digit', month: '2-digit', year: 'numeric'
-                })}
+                }) : 'N/A'}
               </strong>
             </div>
 
@@ -101,7 +101,7 @@ export const Profil: React.FC = () => {
               <span className="text-slate-300 flex items-center gap-2">
                 <Wallet className="w-4 h-4 text-[#1E90FF]" /> Solde Wallet:
               </span>
-              <strong className="text-lg font-black text-white">{user.walletBalanceHTG.toLocaleString('fr-FR')} HTG</strong>
+              <strong className="text-lg font-black text-white">{(user.walletBalanceHTG ?? 0).toLocaleString('fr-FR')} HTG</strong>
             </div>
 
           </div>
@@ -171,12 +171,12 @@ export const Profil: React.FC = () => {
                   >
                     <div className="flex items-center justify-between">
                       <span className="font-extrabold text-white text-sm">{ord.productName}</span>
-                      <span className="font-black text-[#1E90FF]">{ord.priceHTG} HTG</span>
+                      <span className="font-black text-[#1E90FF]">{(ord.priceHTG ?? 0).toLocaleString('fr-FR')} HTG</span>
                     </div>
 
                     <div className="flex items-center justify-between text-slate-400 text-[11px]">
                       <span>ID Joueur: <strong className="text-white font-mono">{ord.gamePlayerId}</strong></span>
-                      <span>{new Date(ord.createdAt).toLocaleDateString('fr-FR')}</span>
+                      <span>{ord.createdAt ? new Date(ord.createdAt).toLocaleDateString('fr-FR') : 'N/A'}</span>
                     </div>
 
                     {ord.pinCodeDelivered && (

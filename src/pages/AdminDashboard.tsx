@@ -523,7 +523,7 @@ export const AdminDashboard: React.FC = () => {
                 <div className="p-5 rounded-2xl bg-slate-900/80 border border-slate-800 space-y-1 shadow-sm">
                   <p className="text-[10px] text-slate-400 font-bold uppercase">Montant Total Vendu</p>
                   <p className="text-2xl font-black text-[#1E90FF]">
-                    {adminStats ? `${adminStats.totalAmountPurchasedHTG.toLocaleString('fr-FR')} HTG` : '0 HTG'}
+                    {adminStats ? `${(adminStats.totalAmountPurchasedHTG ?? 0).toLocaleString('fr-FR')} HTG` : '0 HTG'}
                   </p>
                 </div>
 
@@ -570,7 +570,7 @@ export const AdminDashboard: React.FC = () => {
                           </div>
                         </div>
                         <div className="text-right">
-                          <p className="font-black text-[#1E90FF]">{buyer.totalAmountHTG.toLocaleString('fr-FR')} HTG</p>
+                          <p className="font-black text-[#1E90FF]">{(buyer.totalAmountHTG ?? 0).toLocaleString('fr-FR')} HTG</p>
                           <p className="text-[10px] text-slate-400">{buyer.ordersCount} achats</p>
                         </div>
                       </div>
@@ -717,7 +717,7 @@ export const AdminDashboard: React.FC = () => {
                             </div>
                           ) : (
                             <div className="flex items-center gap-2">
-                              <span className="font-black text-[#1E90FF] text-sm">{p.priceHTG.toLocaleString('fr-FR')} HTG</span>
+                              <span className="font-black text-[#1E90FF] text-sm">{(p.priceHTG ?? 0).toLocaleString('fr-FR')} HTG</span>
                               <button
                                 onClick={() => {
                                   setEditingProdId(p.id);
@@ -860,7 +860,7 @@ export const AdminDashboard: React.FC = () => {
 
                         <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 p-2.5 rounded-xl bg-slate-950 font-mono">
                           <span className="text-[#FF6321] font-bold">ID Transaction: {dep.transactionId14}</span>
-                          <span className="text-[10px] text-slate-400">{new Date(dep.createdAt).toLocaleString('fr-FR')}</span>
+                          <span className="text-[10px] text-slate-400">{dep.createdAt ? new Date(dep.createdAt).toLocaleString('fr-FR') : ''}</span>
                         </div>
 
                         {dep.screenshotUrl && (
@@ -1129,7 +1129,7 @@ export const AdminDashboard: React.FC = () => {
                     <div key={tkt.id} className="p-4 rounded-2xl bg-slate-900/80 border border-slate-800 space-y-2 text-xs shadow-sm text-white">
                       <div className="flex items-center justify-between">
                         <span className="font-extrabold text-white text-sm">{tkt.userName} ({tkt.userEmail})</span>
-                        <span className="text-[10px] text-slate-400">{new Date(tkt.createdAt).toLocaleString('fr-FR')}</span>
+                        <span className="text-[10px] text-slate-400">{tkt.createdAt ? new Date(tkt.createdAt).toLocaleString('fr-FR') : ''}</span>
                       </div>
                       <p className="font-bold text-[#1E90FF]">{tkt.subject}</p>
                       <p className="text-slate-300 leading-relaxed bg-slate-950 p-3 rounded-xl border border-slate-800">{tkt.message}</p>
@@ -1173,7 +1173,7 @@ export const AdminDashboard: React.FC = () => {
               <div className="p-3.5 rounded-2xl bg-slate-900/90 border border-slate-800 space-y-1">
                 <span className="text-[10px] text-slate-400 font-bold uppercase block">Solde sur le compte</span>
                 <span className="text-xl font-black text-[#1E90FF]">
-                  {selectedUserModal.walletBalanceHTG} HTG
+                  {(selectedUserModal.walletBalanceHTG ?? 0).toLocaleString('fr-FR')} HTG
                 </span>
               </div>
 
@@ -1202,7 +1202,7 @@ export const AdminDashboard: React.FC = () => {
             <div className="p-3 rounded-xl bg-slate-950 border border-slate-800 text-[11px] text-slate-400 flex items-center justify-between">
               <span>Date d'inscription :</span>
               <span className="font-mono text-white font-bold">
-                {new Date(selectedUserModal.createdAt).toLocaleDateString('fr-FR')}
+                {selectedUserModal.createdAt ? new Date(selectedUserModal.createdAt).toLocaleDateString('fr-FR') : 'N/A'}
               </span>
             </div>
 

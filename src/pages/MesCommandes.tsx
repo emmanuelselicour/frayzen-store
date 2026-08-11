@@ -83,7 +83,7 @@ export const MesCommandes: React.FC = () => {
 
           <div className="p-4 rounded-2xl glass-card border border-blue-500/20 bg-slate-900/80 space-y-1">
             <p className="text-[10px] text-blue-400 uppercase font-bold tracking-wider">Total Dépensé</p>
-            <p className="text-2xl font-black text-blue-300">{totalSpent.toLocaleString('fr-FR')} HTG</p>
+            <p className="text-2xl font-black text-blue-300">{(totalSpent ?? 0).toLocaleString('fr-FR')} HTG</p>
           </div>
         </div>
       </ScrollReveal>
@@ -120,10 +120,10 @@ export const MesCommandes: React.FC = () => {
                       <span className="font-mono font-black text-white text-sm">{ord.id}</span>
                       <span className="text-[10px] text-slate-400">•</span>
                       <span className="text-xs text-slate-400 font-medium">
-                        {new Date(ord.createdAt).toLocaleString('fr-FR', {
+                        {ord.createdAt ? new Date(ord.createdAt).toLocaleString('fr-FR', {
                           dateStyle: 'medium',
                           timeStyle: 'short'
-                        })}
+                        }) : 'N/A'}
                       </span>
                     </div>
                     <div className="flex items-center gap-2 text-xs text-slate-300">
@@ -163,7 +163,7 @@ export const MesCommandes: React.FC = () => {
 
                   <div className="text-left sm:text-right">
                     <span className="text-lg font-black text-[#1E90FF]">
-                      {ord.priceHTG.toLocaleString('fr-FR')} HTG
+                      {(ord.priceHTG ?? 0).toLocaleString('fr-FR')} HTG
                     </span>
                   </div>
                 </div>
