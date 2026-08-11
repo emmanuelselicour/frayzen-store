@@ -48,44 +48,91 @@ export const fetchProductsFromSupabase = async (): Promise<Product[]> => {
         .order('created_at', { ascending: false });
 
       if (data && data.length > 0 && !error) {
-        const mappedProducts = data.map((p: any) => {
-          const initMatch = INITIAL_PRODUCTS.find(i => i.id === p.id || i.name === p.name);
+        const rawProducts: Product[] = data.map((p: any, idx: number) => {
           const rawPrice = p.price_htg ?? p.priceHTG ?? p.price_HTG ?? p.price ?? p.amount ?? p.cost;
           const numPrice = Number(rawPrice);
+
+          // Match with INITIAL_PRODUCTS
+          let initMatch = INITIAL_PRODUCTS.find(i =>
+            i.id === p.id ||
+            (p.name && i.name && p.name.toLowerCase().trim() === i.name.toLowerCase().trim()) ||
+            (p.diamonds && Number(p.diamonds) === i.diamonds) ||
+            (!isNaN(numPrice) && numPrice > 0 && numPrice === i.priceHTG)
+          );
+
+          if (!initMatch && idx < INITIAL_PRODUCTS.length && (!p.name || p.name === 'Produit')) {
+            initMatch = INITIAL_PRODUCTS[idx];
+          }
+
           const finalPrice = (!isNaN(numPrice) && numPrice > 0)
             ? numPrice
             : (initMatch?.priceHTG && initMatch.priceHTG > 0 ? initMatch.priceHTG : 0);
 
+          const finalName = (p.name && p.name !== 'Produit' && p.name.trim() !== '')
+            ? p.name
+            : (initMatch?.name || 'Produit');
+
+          const finalDiamonds = p.diamonds ? Number(p.diamonds) : initMatch?.diamonds;
+          const finalBonus = p.bonus_diamonds ? Number(p.bonus_diamonds) : (p.bonusDiamonds ? Number(p.bonusDiamonds) : initMatch?.bonusDiamonds);
+
           const productObj: Product = {
-            id: p.id || initMatch?.id || `prod-${Date.now()}`,
-            name: p.name || initMatch?.name || 'Produit',
+            id: p.id || initMatch?.id || `prod-${idx}`,
+            name: finalName,
             category: (p.category as ProductCategory) || initMatch?.category || 'free_fire',
             priceHTG: finalPrice,
-            diamonds: p.diamonds ? Number(p.diamonds) : initMatch?.diamonds,
-            bonusDiamonds: p.bonus_diamonds ? Number(p.bonus_diamonds) : (p.bonusDiamonds ? Number(p.bonusDiamonds) : initMatch?.bonusDiamonds),
+            diamonds: finalDiamonds,
+            bonusDiamonds: finalBonus,
             image: p.image || initMatch?.image,
-            description: p.description || initMatch?.description,
+            description: (p.description && p.description !== 'Produit' && p.description.trim() !== '') ? p.description : initMatch?.description,
             stock: p.stock !== undefined && p.stock !== null ? Number(p.stock) : (initMatch?.stock ?? 100),
             isPopular: p.is_popular !== undefined && p.is_popular !== null ? Boolean(p.is_popular) : Boolean(p.isPopular ?? initMatch?.isPopular),
             pinCodes: Array.isArray(p.pin_codes) ? p.pin_codes : (Array.isArray(p.pinCodes) ? p.pinCodes : (initMatch?.pinCodes || []))
           };
 
-          // Auto-heal DB row if price was missing or 0 in Supabase
-          if ((p.price_htg === null || p.price_htg === undefined || Number(p.price_htg) <= 0) && finalPrice > 0) {
+          // Auto-heal DB row if Supabase row had generic name 'Produit' or missing diamonds or price
+          if (!p.name || p.name === 'Produit' || !p.diamonds || !p.price_htg || Number(p.price_htg) <= 0) {
             syncProductToSupabase(productObj).catch(() => {});
           }
 
           return productObj;
         });
 
-        // Ensure all default initial products exist
+        // Deduplicate products by priceHTG or diamonds or id
+        const uniqueMap = new Map<string, Product>();
+        for (const prod of rawProducts) {
+          const key = prod.priceHTG > 0 ? `price-${prod.priceHTG}` : (prod.diamonds ? `diam-${prod.diamonds}` : prod.id);
+          const existing = uniqueMap.get(key);
+          if (!existing) {
+            uniqueMap.set(key, prod);
+          } else {
+            // Keep the one with a specific non-generic name if existing is 'Produit'
+            if (existing.name === 'Produit' && prod.name !== 'Produit') {
+              uniqueMap.set(key, prod);
+            }
+            // Delete duplicate row from Supabase if it had a different id
+            if (prod.id !== existing.id) {
+              deleteProductFromSupabase(prod.id).catch(() => {});
+            }
+          }
+        }
+
+        const mappedProducts = Array.from(uniqueMap.values());
+
+        // Ensure all default initial products exist if missing
         for (const initP of INITIAL_PRODUCTS) {
-          if (!mappedProducts.some(mp => mp.id === initP.id || mp.name === initP.name)) {
+          const exists = mappedProducts.some(mp =>
+            mp.id === initP.id ||
+            mp.priceHTG === initP.priceHTG ||
+            (mp.diamonds && mp.diamonds === initP.diamonds) ||
+            mp.name === initP.name
+          );
+          if (!exists) {
             mappedProducts.push(initP);
             syncProductToSupabase(initP).catch(() => {});
           }
         }
 
+        mappedProducts.sort((a, b) => a.priceHTG - b.priceHTG);
         return mappedProducts;
       } else if (error || !data || data.length === 0) {
         // Auto-seed INITIAL_PRODUCTS if table is empty
