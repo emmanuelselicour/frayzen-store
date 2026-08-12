@@ -110,37 +110,32 @@ export const fetchProductsFromSupabase = async (localProductsFallback?: Product[
 
       if (data && data.length > 0 && !error) {
         for (const p of data) {
-          const pId = String(p.id || '').trim();
-          if (!pId) continue;
+          const pCode = String(p.product_code || p.id || '').trim();
+          if (!pCode) continue;
 
-          const rawPrice = p.price_htg ?? p.priceHTG ?? p.price_HTG ?? p.price ?? p.amount ?? p.cost;
+          const rawPrice = p.price ?? p.price_htg ?? p.priceHTG ?? p.amount;
           const numPrice = Number(rawPrice);
-          const numDiamonds = p.diamonds ? Number(p.diamonds) : undefined;
+          const numDiamonds = (p.diamonds_amount !== undefined && p.diamonds_amount !== null) ? Number(p.diamonds_amount) : (p.diamonds ? Number(p.diamonds) : undefined);
 
-          let existing = productsMap.get(pId);
-          if (!existing) {
-            existing = productsMap.get(`prod-${pId}`) || Array.from(productsMap.values()).find(item => item.id === pId || (numPrice > 0 && item.priceHTG === numPrice));
-          }
+          let existing = productsMap.get(pCode) || productsMap.get(p.id);
 
           const finalPrice = (!isNaN(numPrice) && numPrice > 0)
             ? numPrice
             : (existing?.priceHTG || 0);
 
-          const rawNameStr = String(p.name || '').trim();
+          const rawNameStr = String(p.title || p.name || '').trim();
           const finalName = (rawNameStr && rawNameStr !== 'Produit')
             ? rawNameStr
             : (existing?.name || 'Pack Diamants');
 
           const finalDiamonds = numDiamonds || existing?.diamonds;
-          const finalBonus = p.bonus_diamonds ? Number(p.bonus_diamonds) : (p.bonusDiamonds ? Number(p.bonusDiamonds) : existing?.bonusDiamonds);
+          const finalBonus = p.bonus_diamonds !== undefined ? Number(p.bonus_diamonds) : existing?.bonusDiamonds;
 
           const allowedMethods = Array.isArray(p.allowed_payment_methods)
             ? p.allowed_payment_methods
-            : (Array.isArray(p.allowedPaymentMethods) ? p.allowedPaymentMethods : (existing?.allowedPaymentMethods || (p.category === 'free_fire' ? ['wallet'] : ['wallet', 'moncash', 'natcash'])));
+            : (existing?.allowedPaymentMethods || (p.category === 'free_fire' ? ['wallet'] : ['wallet', 'moncash', 'natcash']));
 
-          const parsedDbPins = parsePinCodes(p.pin_codes ?? p.pinCodes ?? p.pin_code ?? p.pincodes);
-          
-          // Combine DB pins with any locally known PINs so PINs are NEVER lost
+          const parsedDbPins = parsePinCodes(p.pin_codes ?? p.pinCodes);
           const combinedPinsSet = new Set<string>();
           if (existing?.pinCodes) {
             existing.pinCodes.forEach(pin => combinedPinsSet.add(pin));
@@ -149,13 +144,13 @@ export const fetchProductsFromSupabase = async (localProductsFallback?: Product[
           const finalPinCodes = Array.from(combinedPinsSet);
 
           const productObj: Product = {
-            id: pId || existing?.id || `prod-${Date.now()}`,
+            id: pCode || existing?.id || `prod-${Date.now()}`,
             name: finalName,
             category: (p.category as ProductCategory) || existing?.category || 'free_fire',
             priceHTG: finalPrice,
             diamonds: finalDiamonds,
             bonusDiamonds: finalBonus,
-            image: p.image || existing?.image || 'https://images.unsplash.com/photo-1542751371-adc38448a05e?auto=format&fit=crop&w=600&q=80',
+            image: p.image_url || p.image || existing?.image || 'https://images.unsplash.com/photo-1542751371-adc38448a05e?auto=format&fit=crop&w=600&q=80',
             description: (p.description && p.description !== 'Produit' && p.description.trim() !== '') ? p.description : (existing?.description || 'Top Up par ID Free Fire'),
             stock: p.stock !== undefined && p.stock !== null ? Math.max(Number(p.stock), finalPinCodes.length) : (finalPinCodes.length > 0 ? finalPinCodes.length : (existing?.stock ?? 100)),
             isPopular: p.is_popular !== undefined && p.is_popular !== null ? Boolean(p.is_popular) : Boolean(p.isPopular ?? existing?.isPopular),
@@ -164,10 +159,6 @@ export const fetchProductsFromSupabase = async (localProductsFallback?: Product[
           };
 
           productsMap.set(productObj.id, productObj);
-        }
-      } else if (error || !data || data.length === 0) {
-        for (const initP of INITIAL_PRODUCTS) {
-          syncProductToSupabase(initP).catch(() => {});
         }
       }
     } catch (err) {
@@ -222,6 +213,21 @@ export const fetchDepositsFromSupabase = async (email?: string, fallbackDeposits
   // 2. Query Supabase DB
   if (supabaseAdmin) {
     try {
+      // Build user details map
+      const userDetailsMap = new Map<string, { email: string; name: string; phone: string }>();
+      const { data: dbUsers } = await supabaseAdmin.from('users').select('*');
+      if (dbUsers) {
+        dbUsers.forEach(u => {
+          if (u.id) {
+            userDetailsMap.set(u.id, {
+              email: u.email || '',
+              name: u.name || '',
+              phone: u.phone || ''
+            });
+          }
+        });
+      }
+
       const { data, error } = await supabaseAdmin
         .from('wallet_deposits')
         .select('*')
@@ -229,15 +235,16 @@ export const fetchDepositsFromSupabase = async (email?: string, fallbackDeposits
 
       if (data && !error) {
         for (const d of data) {
+          const userMeta = userDetailsMap.get(String(d.user_id));
           const item: WalletDeposit = {
             id: String(d.id),
-            userId: String(d.user_id || d.userId || ''),
-            userEmail: d.user_email || d.userEmail || d.email || '',
-            userName: d.user_name || d.userName || d.name || '',
-            userPhone: d.user_phone || d.userPhone || d.phone || '',
-            transactionId14: d.transaction_id_14 || d.transactionId14 || d.transaction_id || '',
+            userId: String(d.user_id || ''),
+            userEmail: d.user_email || d.userEmail || userMeta?.email || '',
+            userName: d.user_name || d.userName || userMeta?.name || '',
+            userPhone: d.user_phone || d.userPhone || userMeta?.phone || '',
+            transactionId14: d.transaction_id || d.transaction_id_14 || d.transactionId14 || '',
             paymentMethod: d.payment_method || d.paymentMethod || 'natcash',
-            amountHTG: Number(d.amount_htg ?? d.amountHTG ?? d.amount ?? 0),
+            amountHTG: Number(d.amount ?? d.amount_htg ?? d.amountHTG ?? 0),
             status: d.status || 'en_attente',
             createdAt: d.created_at || d.createdAt || new Date().toISOString(),
             adminNote: d.admin_note || d.adminNote,
@@ -275,6 +282,21 @@ export const fetchOrdersFromSupabase = async (email?: string, fallbackOrders: Or
   // 2. Query Supabase DB
   if (supabaseAdmin) {
     try {
+      // Build user details map
+      const userDetailsMap = new Map<string, { email: string; name: string; phone: string }>();
+      const { data: dbUsers } = await supabaseAdmin.from('users').select('*');
+      if (dbUsers) {
+        dbUsers.forEach(u => {
+          if (u.id) {
+            userDetailsMap.set(u.id, {
+              email: u.email || '',
+              name: u.name || '',
+              phone: u.phone || ''
+            });
+          }
+        });
+      }
+
       const { data, error } = await supabaseAdmin
         .from('orders')
         .select('*')
@@ -282,19 +304,20 @@ export const fetchOrdersFromSupabase = async (email?: string, fallbackOrders: Or
 
       if (data && !error) {
         for (const o of data) {
+          const userMeta = userDetailsMap.get(String(o.user_id));
           const ordObj: Order = {
             id: String(o.id),
-            userId: String(o.user_id || o.userId || ''),
-            userEmail: o.user_email || o.userEmail || o.email || '',
-            userName: o.user_name || o.userName || o.name || '',
+            userId: String(o.user_id || ''),
+            userEmail: o.user_email || o.userEmail || userMeta?.email || '',
+            userName: o.user_name || o.userName || userMeta?.name || '',
             productId: String(o.product_id || o.productId || ''),
-            productName: o.product_name || o.productName || '',
-            priceHTG: Number(o.price_htg ?? o.priceHTG ?? o.price ?? 0),
-            gamePlayerId: o.game_player_id || o.gamePlayerId || o.game_id || '',
+            productName: o.product_name || o.productName || 'Pack Diamants',
+            priceHTG: Number(o.amount ?? o.price_htg ?? o.priceHTG ?? 0),
+            gamePlayerId: o.game_player_id || o.gamePlayerId || '',
             paymentMethod: o.payment_method || o.paymentMethod || 'wallet',
-            natcashTransactionId: o.natcash_transaction_id || o.natcashTransactionId || o.transaction_id,
-            pinCodeDelivered: o.pin_code_delivered || o.pinCodeDelivered || o.pin_code,
-            status: o.status || 'reussi',
+            natcashTransactionId: o.natcash_transaction_id || o.natcashTransactionId,
+            pinCodeDelivered: o.pin_code_delivered || o.pin_code || o.pinCodeDelivered,
+            status: (o.status === 'livre' || o.status === 'livré' ? 'reussi' : o.status) || 'reussi',
             createdAt: o.created_at || o.createdAt || new Date().toISOString()
           };
           ordersMap.set(String(ordObj.id).trim(), ordObj);
@@ -503,6 +526,60 @@ export const signUpWithSupabaseAuth = async (email: string, name: string, phone:
   }
 };
 
+// Helper to generate or format deterministic UUID
+export function toUuid(idStr?: string): string {
+  if (!idStr) return crypto.randomUUID();
+  const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(idStr);
+  if (isUuid) return idStr;
+  const hash = crypto.createHash('md5').update(String(idStr)).digest('hex');
+  return `${hash.slice(0, 8)}-${hash.slice(8, 12)}-4${hash.slice(13, 16)}-a${hash.slice(17, 20)}-${hash.slice(20, 32)}`;
+}
+
+// Helper to ensure user exists in Supabase Auth & public.users table to satisfy foreign keys
+export const ensureAuthUserInSupabase = async (email?: string, name?: string, phone?: string): Promise<string> => {
+  if (!supabaseAdmin) return crypto.randomUUID();
+  const targetEmail = (email || 'client@frayzen.com').toLowerCase().trim();
+
+  try {
+    // 1. Check in Supabase Auth
+    const { data: listData } = await supabaseAdmin.auth.admin.listUsers();
+    if (listData && listData.users) {
+      const existing = listData.users.find(u => u.email && u.email.toLowerCase().trim() === targetEmail);
+      if (existing) {
+        return existing.id;
+      }
+    }
+
+    // 2. Create in Supabase Auth if missing
+    const { data: newUser, error } = await supabaseAdmin.auth.admin.createUser({
+      email: targetEmail,
+      password: 'TempUserPass123!',
+      email_confirm: true,
+      user_metadata: { name: name || targetEmail.split('@')[0], phone: phone || '' }
+    });
+
+    if (newUser && newUser.user) {
+      const authUserId = newUser.user.id;
+      // Also upsert into public.users table
+      await supabaseAdmin.from('users').upsert({
+        id: authUserId,
+        email: targetEmail,
+        name: name || targetEmail.split('@')[0],
+        phone: phone || null,
+        wallet_balance_htg: 0,
+        is_admin: false,
+        is_email_verified: true,
+        created_at: new Date().toISOString()
+      }, { onConflict: 'id' });
+      return authUserId;
+    }
+  } catch (err) {
+    // silent fallback
+  }
+
+  return toUuid('usr-' + targetEmail);
+};
+
 export const syncNatcashConfigToSupabase = async (config: NatcashConfig) => {
   if (!supabaseAdmin) return;
   try {
@@ -525,47 +602,28 @@ export const syncNatcashConfigToSupabase = async (config: NatcashConfig) => {
 export const syncProductToSupabase = async (product: Product) => {
   if (!supabaseAdmin) return;
   try {
+    const prodUuid = toUuid(product.id);
     const pinCodesArr = Array.isArray(product.pinCodes) ? product.pinCodes : [];
-    const { error } = await supabaseAdmin.from('products').upsert({
-      id: product.id,
-      name: product.name,
-      category: product.category,
-      price_htg: product.priceHTG,
-      diamonds: product.diamonds,
-      bonus_diamonds: product.bonusDiamonds,
-      image: product.image,
-      description: product.description,
-      stock: product.stock,
-      is_popular: product.isPopular,
-      pin_codes: pinCodesArr,
-      allowed_payment_methods: product.allowedPaymentMethods || (product.category === 'free_fire' ? ['wallet'] : ['wallet', 'moncash', 'natcash'])
-    }, { onConflict: 'id' });
 
+    const payload: any = {
+      id: prodUuid,
+      product_code: product.id,
+      title: product.name,
+      description: product.description || 'Top Up par ID Free Fire - Livré à l\'instant',
+      price: Number(product.priceHTG) || 0,
+      diamonds_amount: Number(product.diamonds) || null,
+      bonus_diamonds: Number(product.bonusDiamonds) || 0,
+      image_url: product.image,
+      category: product.category || 'free_fire',
+      stock: Math.max(Number(product.stock) || 0, pinCodesArr.length),
+      is_popular: Boolean(product.isPopular)
+    };
+
+    const { error } = await supabaseAdmin.from('products').upsert(payload, { onConflict: 'id' });
     if (error) {
-      const msg = String(error.message || '');
-      if (msg.includes('pin_code') || msg.includes('column') || msg.includes('array')) {
-        console.warn('[Supabase] Retrying product sync with json string format:', msg);
-        try {
-          await supabaseAdmin.from('products').upsert({
-            id: product.id,
-            name: product.name,
-            category: product.category,
-            price_htg: product.priceHTG,
-            diamonds: product.diamonds,
-            bonus_diamonds: product.bonusDiamonds,
-            image: product.image,
-            description: product.description,
-            stock: product.stock,
-            is_popular: product.isPopular,
-            pin_codes: JSON.stringify(pinCodesArr),
-            allowed_payment_methods: product.allowedPaymentMethods || (product.category === 'free_fire' ? ['wallet'] : ['wallet', 'moncash', 'natcash'])
-          }, { onConflict: 'id' });
-        } catch {
-          // silent fallback
-        }
-      } else {
-        handleSupabaseError('Erreur sync product', error);
-      }
+      console.error('[Supabase] Error syncing product:', error.message || error);
+    } else {
+      console.log('[Supabase] Product synced successfully:', product.id);
     }
   } catch (err: any) {
     handleSupabaseError('Erreur sync product', err);
@@ -575,7 +633,7 @@ export const syncProductToSupabase = async (product: Product) => {
 export const deleteProductFromSupabase = async (id: string) => {
   if (!supabaseAdmin) return;
   try {
-    await supabaseAdmin.from('products').delete().eq('id', id);
+    await supabaseAdmin.from('products').delete().eq('id', toUuid(id));
   } catch (err) {
     handleSupabaseError('Erreur suppression product', err);
   }
@@ -584,10 +642,11 @@ export const deleteProductFromSupabase = async (id: string) => {
 export const syncUserToSupabase = async (user: UserProfile) => {
   if (!supabaseAdmin) return;
   try {
+    const authUserId = await ensureAuthUserInSupabase(user.email, user.name, user.phone);
     await supabaseAdmin.from('users').upsert({
-      id: user.id,
+      id: authUserId,
       name: user.name,
-      email: user.email,
+      email: user.email.toLowerCase().trim(),
       phone: user.phone,
       created_at: user.createdAt,
       is_email_verified: user.isEmailVerified,
@@ -602,52 +661,25 @@ export const syncUserToSupabase = async (user: UserProfile) => {
 export const syncDepositToSupabase = async (deposit: WalletDeposit) => {
   if (!supabaseAdmin) return;
   try {
-    const rawUserId = String(deposit.userId || '').trim();
-    const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(rawUserId);
+    const authUserId = await ensureAuthUserInSupabase(deposit.userEmail, deposit.userName, deposit.userPhone);
+    const depUuid = toUuid(deposit.id);
 
-    const fullPayload: any = {
-      id: String(deposit.id).trim(),
-      user_id: isUuid ? rawUserId : null,
-      user_email: deposit.userEmail,
-      user_name: deposit.userName,
-      user_phone: deposit.userPhone,
-      transaction_id_14: deposit.transactionId14,
+    const payload: any = {
+      id: depUuid,
+      user_id: authUserId,
+      transaction_id: deposit.transactionId14 || deposit.id,
+      amount: Number(deposit.amountHTG) || 0,
       payment_method: deposit.paymentMethod || 'natcash',
-      amount_htg: deposit.amountHTG,
-      status: deposit.status,
-      created_at: deposit.createdAt,
+      status: deposit.status || 'en_attente',
+      user_phone: deposit.userPhone || null,
       admin_note: deposit.adminNote || null,
-      screenshot_url: deposit.screenshotUrl || null
+      screenshot_url: deposit.screenshotUrl || null,
+      created_at: deposit.createdAt || new Date().toISOString()
     };
 
-    const { error } = await supabaseAdmin.from('wallet_deposits').upsert(fullPayload, { onConflict: 'id' });
-
+    const { error } = await supabaseAdmin.from('wallet_deposits').upsert(payload, { onConflict: 'id' });
     if (error) {
-      console.error('[Supabase] Error in syncDepositToSupabase:', error.message || error);
-      // Fallback 1: Try without user_id in case user_id constraint is strictly UUID or missing
-      delete fullPayload.user_id;
-      const { error: err2 } = await supabaseAdmin.from('wallet_deposits').upsert(fullPayload, { onConflict: 'id' });
-      
-      if (err2) {
-        // Fallback 2: Minimal payload
-        const minimalPayload = {
-          id: String(deposit.id).trim(),
-          user_email: deposit.userEmail,
-          user_name: deposit.userName,
-          transaction_id_14: deposit.transactionId14,
-          amount_htg: deposit.amountHTG,
-          status: deposit.status,
-          created_at: deposit.createdAt
-        };
-        const { error: minErr } = await supabaseAdmin.from('wallet_deposits').upsert(minimalPayload, { onConflict: 'id' });
-        if (minErr) {
-          console.error('[Supabase] Minimal fallback syncDepositToSupabase error:', minErr.message || minErr);
-        } else {
-          console.log('[Supabase] Minimal fallback syncDepositToSupabase succeeded for:', deposit.id);
-        }
-      } else {
-        console.log('[Supabase] Fallback 1 syncDepositToSupabase succeeded for:', deposit.id);
-      }
+      console.error('[Supabase] Error syncing deposit:', error.message || error);
     } else {
       console.log('[Supabase] Deposit synced successfully:', deposit.id);
     }
@@ -659,58 +691,36 @@ export const syncDepositToSupabase = async (deposit: WalletDeposit) => {
 export const syncOrderToSupabase = async (order: Order) => {
   if (!supabaseAdmin) return;
   try {
-    const rawUserId = String(order.userId || '').trim();
-    const isUserUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(rawUserId);
+    const authUserId = await ensureAuthUserInSupabase(order.userEmail, order.userName);
+    const ordUuid = toUuid(order.id);
+    const prodUuid = order.productId ? toUuid(order.productId) : null;
 
-    const rawProductId = String(order.productId || '').trim();
-    const isProdUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(rawProductId);
+    // Map status for DB check constraint orders_status_check ('livre', 'en_attente', 'annule')
+    let dbStatus = 'livre';
+    const rawSt = String(order.status || '').toLowerCase().trim();
+    if (rawSt === 'en_attente' || rawSt === 'pending') {
+      dbStatus = 'en_attente';
+    } else if (rawSt === 'annule' || rawSt === 'annulé' || rawSt === 'cancelled') {
+      dbStatus = 'annule';
+    }
 
-    const fullPayload: any = {
-      id: String(order.id).trim(),
-      user_id: isUserUuid ? rawUserId : null,
-      user_email: order.userEmail,
-      user_name: order.userName,
-      product_id: isProdUuid ? rawProductId : rawProductId,
-      product_name: order.productName,
-      price_htg: order.priceHTG,
-      game_player_id: order.gamePlayerId,
-      payment_method: order.paymentMethod,
-      natcash_transaction_id: order.natcashTransactionId || null,
+    const payload: any = {
+      id: ordUuid,
+      user_id: authUserId,
+      product_id: prodUuid,
+      game_player_id: order.gamePlayerId || 'N/A',
+      amount: Number(order.priceHTG) || 0,
+      payment_method: order.paymentMethod || 'wallet',
+      status: dbStatus,
       pin_code_delivered: order.pinCodeDelivered || null,
-      status: order.status,
-      created_at: order.createdAt
+      pin_code: order.pinCodeDelivered || null,
+      natcash_transaction_id: order.natcashTransactionId || null,
+      created_at: order.createdAt || new Date().toISOString()
     };
 
-    let { error } = await supabaseAdmin.from('orders').upsert(fullPayload, { onConflict: 'id' });
-
+    const { error } = await supabaseAdmin.from('orders').upsert(payload, { onConflict: 'id' });
     if (error) {
-      console.error('[Supabase] Error in syncOrderToSupabase fullPayload:', error.message || error);
-      // Fallback 1: Try setting product_id to null if product_id constraint/type failed
-      const payload2 = { ...fullPayload, product_id: isProdUuid ? rawProductId : null, user_id: null };
-      const { error: err2 } = await supabaseAdmin.from('orders').upsert(payload2, { onConflict: 'id' });
-
-      if (err2) {
-        console.error('[Supabase] Fallback 1 syncOrderToSupabase error:', err2.message || err2);
-        // Fallback 2: Minimal payload
-        const minimalPayload = {
-          id: String(order.id).trim(),
-          user_email: order.userEmail,
-          product_name: order.productName,
-          price_htg: order.priceHTG,
-          game_player_id: order.gamePlayerId,
-          payment_method: order.paymentMethod,
-          status: order.status,
-          created_at: order.createdAt
-        };
-        const { error: minErr } = await supabaseAdmin.from('orders').upsert(minimalPayload, { onConflict: 'id' });
-        if (minErr) {
-          console.error('[Supabase] Minimal fallback syncOrderToSupabase error:', minErr.message || minErr);
-        } else {
-          console.log('[Supabase] Minimal fallback syncOrderToSupabase succeeded for order:', order.id);
-        }
-      } else {
-        console.log('[Supabase] Fallback 1 syncOrderToSupabase succeeded for order:', order.id);
-      }
+      console.error('[Supabase] Error syncing order:', error.message || error);
     } else {
       console.log('[Supabase] Order synced successfully:', order.id);
     }
@@ -721,64 +731,29 @@ export const syncOrderToSupabase = async (order: Order) => {
 
 export const syncTicketToSupabase = async (ticket: ContactTicket) => {
   if (!supabaseAdmin) return;
-  const rawUserId = String(ticket.userId || '').trim();
-  const isUserUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(rawUserId);
-
-  // 1. Sync to 'contacts' table
   try {
-    const contactPayload: any = {
-      id: String(ticket.id).trim(),
-      user_id: isUserUuid ? rawUserId : null,
-      name: ticket.userName,
-      user_name: ticket.userName,
-      email: ticket.userEmail,
-      user_email: ticket.userEmail,
-      phone: ticket.userPhone || null,
-      user_phone: ticket.userPhone || null,
-      subject: ticket.subject,
-      message: ticket.message,
-      status: ticket.status,
-      created_at: ticket.createdAt
+    const authUserId = await ensureAuthUserInSupabase(ticket.userEmail, ticket.userName, ticket.userPhone);
+    const ctUuid = toUuid(ticket.id);
+
+    const payload: any = {
+      id: ctUuid,
+      user_id: authUserId,
+      full_name: ticket.userName || 'Client',
+      email: ticket.userEmail || 'non_fourni@frayzen.com',
+      phone_number: ticket.userPhone || null,
+      subject: ticket.subject || 'Demande de support',
+      message: ticket.message || '',
+      status: ticket.status || 'nouveau',
+      created_at: ticket.createdAt || new Date().toISOString()
     };
 
-    const { error: cErr } = await supabaseAdmin.from('contacts').upsert(contactPayload, { onConflict: 'id' });
-    if (cErr) {
-      const minContact = {
-        id: String(ticket.id).trim(),
-        name: ticket.userName,
-        email: ticket.userEmail,
-        phone: ticket.userPhone || null,
-        subject: ticket.subject,
-        message: ticket.message,
-        status: ticket.status,
-        created_at: ticket.createdAt
-      };
-      await supabaseAdmin.from('contacts').upsert(minContact, { onConflict: 'id' });
+    const { error } = await supabaseAdmin.from('contacts').upsert(payload, { onConflict: 'id' });
+    if (error) {
+      console.error('[Supabase] Error syncing contact ticket:', error.message || error);
+    } else {
+      console.log('[Supabase] Contact ticket synced successfully:', ticket.id);
     }
   } catch (err) {
     handleSupabaseError('Erreur sync contacts', err);
-  }
-
-  // 2. Sync to 'tickets' table
-  try {
-    const ticketPayload: any = {
-      id: String(ticket.id).trim(),
-      user_id: isUserUuid ? rawUserId : null,
-      user_name: ticket.userName,
-      user_email: ticket.userEmail,
-      user_phone: ticket.userPhone || null,
-      subject: ticket.subject,
-      message: ticket.message,
-      status: ticket.status,
-      created_at: ticket.createdAt
-    };
-
-    const { error: tErr } = await supabaseAdmin.from('tickets').upsert(ticketPayload, { onConflict: 'id' });
-    if (tErr) {
-      delete ticketPayload.user_id;
-      await supabaseAdmin.from('tickets').upsert(ticketPayload, { onConflict: 'id' });
-    }
-  } catch (err) {
-    handleSupabaseError('Erreur sync tickets', err);
   }
 };
