@@ -567,11 +567,19 @@ app.put('/api/wallet/deposits/:id', async (req, res) => {
     const { id } = req.params;
     const { status, adminNote } = req.body || {};
 
+    const targetId = String(id || '').trim();
     const allDeposits = await fetchDepositsFromSupabase(undefined, walletDeposits);
-    const depIdx = walletDeposits.findIndex(d => d.id === id);
-    let deposit = allDeposits.find(d => d.id === id) || (depIdx !== -1 ? walletDeposits[depIdx] : null);
+    const depIdx = walletDeposits.findIndex(d => 
+      String(d.id).trim() === targetId || 
+      (d.transactionId14 && String(d.transactionId14).trim() === targetId)
+    );
+    let deposit = allDeposits.find(d => 
+      String(d.id).trim() === targetId || 
+      (d.transactionId14 && String(d.transactionId14).trim() === targetId)
+    ) || (depIdx !== -1 ? walletDeposits[depIdx] : null);
 
     if (!deposit) {
+      console.error(`Demande de dépôt introuvable pour ID: '${id}'`);
       return res.status(404).json({ error: 'Demande de dépôt non trouvée.' });
     }
 
@@ -604,9 +612,9 @@ app.put('/api/wallet/deposits/:id', async (req, res) => {
     }
 
     if (depIdx !== -1) {
-      walletDeposits[depIdx] = deposit;
+      walletDeposits[depIdx] = { ...deposit };
     } else {
-      walletDeposits.unshift(deposit);
+      walletDeposits.unshift({ ...deposit });
     }
 
     saveDataStore();
@@ -827,9 +835,15 @@ app.put('/api/orders/:id', async (req, res) => {
     const { id } = req.params;
     const { status, pinCode } = req.body || {};
 
+    const targetId = String(id || '').trim();
     const allOrders = await fetchOrdersFromSupabase(undefined, orders);
-    const order = allOrders.find(o => o.id === id);
+    const order = allOrders.find(o => 
+      String(o.id).trim() === targetId || 
+      (o.natcashTransactionId && String(o.natcashTransactionId).trim() === targetId)
+    ) || orders.find(o => String(o.id).trim() === targetId);
+
     if (!order) {
+      console.error(`Commande introuvable pour ID: '${id}'`);
       return res.status(404).json({ error: 'Commande non trouvée.' });
     }
 

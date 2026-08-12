@@ -283,7 +283,7 @@ export const fetchDepositsFromSupabase = async (email?: string, fallbackDeposits
     for (const d of fallbackDeposits) {
       if (d && d.id) {
         if (!email || d.userEmail?.toLowerCase().trim() === email.toLowerCase().trim()) {
-          depsMap.set(d.id, d);
+          depsMap.set(String(d.id).trim(), d);
         }
       }
     }
@@ -299,20 +299,20 @@ export const fetchDepositsFromSupabase = async (email?: string, fallbackDeposits
       if (data && !error) {
         for (const d of data) {
           const item: WalletDeposit = {
-            id: d.id,
-            userId: d.user_id || d.userId,
-            userEmail: d.user_email || d.userEmail,
-            userName: d.user_name || d.userName,
-            userPhone: d.user_phone || d.userPhone,
-            transactionId14: d.transaction_id_14 || d.transactionId14,
+            id: String(d.id),
+            userId: String(d.user_id || d.userId || ''),
+            userEmail: d.user_email || d.userEmail || '',
+            userName: d.user_name || d.userName || '',
+            userPhone: d.user_phone || d.userPhone || '',
+            transactionId14: d.transaction_id_14 || d.transactionId14 || '',
             paymentMethod: d.payment_method || d.paymentMethod || 'natcash',
-            amountHTG: Number(d.amount_htg ?? d.amountHTG),
+            amountHTG: Number(d.amount_htg ?? d.amountHTG ?? 0),
             status: d.status,
-            createdAt: d.created_at || d.createdAt,
+            createdAt: d.created_at || d.createdAt || new Date().toISOString(),
             adminNote: d.admin_note || d.adminNote,
             screenshotUrl: d.screenshot_url || d.screenshotUrl
           };
-          depsMap.set(item.id, item);
+          depsMap.set(String(item.id).trim(), item);
         }
       }
     } catch (err) {
@@ -330,7 +330,7 @@ export const fetchOrdersFromSupabase = async (email?: string, fallbackOrders: Or
     for (const o of fallbackOrders) {
       if (o && o.id) {
         if (!email || o.userEmail.toLowerCase().trim() === email.toLowerCase().trim()) {
-          ordersMap.set(o.id, o);
+          ordersMap.set(String(o.id).trim(), o);
         }
       }
     }
@@ -346,21 +346,21 @@ export const fetchOrdersFromSupabase = async (email?: string, fallbackOrders: Or
       if (data && !error) {
         for (const o of data) {
           const ordObj: Order = {
-            id: o.id,
-            userId: o.user_id || o.userId,
-            userEmail: o.user_email || o.userEmail,
-            userName: o.user_name || o.userName,
-            productId: o.product_id || o.productId,
-            productName: o.product_name || o.productName,
+            id: String(o.id),
+            userId: String(o.user_id || o.userId || ''),
+            userEmail: o.user_email || o.userEmail || '',
+            userName: o.user_name || o.userName || '',
+            productId: String(o.product_id || o.productId || ''),
+            productName: o.product_name || o.productName || '',
             priceHTG: Number(o.price_htg ?? o.priceHTG ?? o.price ?? 0),
-            gamePlayerId: o.game_player_id || o.gamePlayerId,
-            paymentMethod: o.payment_method || o.paymentMethod,
+            gamePlayerId: o.game_player_id || o.gamePlayerId || '',
+            paymentMethod: o.payment_method || o.paymentMethod || 'wallet',
             natcashTransactionId: o.natcash_transaction_id || o.natcashTransactionId,
             pinCodeDelivered: o.pin_code_delivered || o.pinCodeDelivered,
             status: o.status,
             createdAt: o.created_at || o.createdAt
           };
-          ordersMap.set(ordObj.id, ordObj);
+          ordersMap.set(String(ordObj.id).trim(), ordObj);
         }
       }
     } catch (err) {

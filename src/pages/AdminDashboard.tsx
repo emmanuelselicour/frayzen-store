@@ -492,7 +492,7 @@ export const AdminDashboard: React.FC = () => {
   // Update Deposit Status
   const handleUpdateDepositStatus = async (id: string, status: DepositStatus, adminNote?: string) => {
     try {
-      const res = await fetch(`/api/wallet/deposits/${id}`, {
+      const res = await fetch(`/api/wallet/deposits/${encodeURIComponent(id)}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ status, adminNote })
