@@ -171,6 +171,7 @@ export const AdminDashboard: React.FC = () => {
       const data = await res.json();
       if (res.ok) {
         setIsPinSectionUnlocked(true);
+        setIsPinModalOpen(false);
         showToast('Accès à la gestion des PINs déverrouillé !', 'success');
         setPinPasswordInput('');
       } else {

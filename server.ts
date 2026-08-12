@@ -194,7 +194,9 @@ app.post('/api/admin/verify-pin-password', (req, res) => {
 // Products API
 app.get('/api/products', async (req, res) => {
   try {
-    const prods = await fetchProductsFromSupabase();
+    const prods = await fetchProductsFromSupabase(products);
+    products = prods;
+    saveDataStore();
     res.json(prods);
   } catch (err: any) {
     console.error('Error in GET /api/products:', err);
@@ -209,6 +211,8 @@ app.post('/api/products', async (req, res) => {
       return res.status(400).json({ error: 'Nom, catégorie et prix en HTG sont obligatoires.' });
     }
 
+    const cleanedPins = Array.isArray(pinCodes) ? pinCodes.map((p: string) => String(p).trim()).filter(Boolean) : [];
+
     const newProduct: Product = {
       id: `prod-${Date.now()}`,
       name: String(name).trim(),
@@ -218,9 +222,9 @@ app.post('/api/products', async (req, res) => {
       bonusDiamonds: bonusDiamonds ? Number(bonusDiamonds) : undefined,
       image: image || 'https://images.unsplash.com/photo-1542751371-adc38448a05e?auto=format&fit=crop&w=600&q=80',
       description: description || '',
-      stock: Number(stock) || 0,
+      stock: cleanedPins.length > Number(stock || 0) ? cleanedPins.length : (Number(stock) || 0),
       isPopular: Boolean(isPopular),
-      pinCodes: Array.isArray(pinCodes) ? pinCodes : [],
+      pinCodes: cleanedPins,
       allowedPaymentMethods: Array.isArray(allowedPaymentMethods) && allowedPaymentMethods.length > 0
         ? allowedPaymentMethods
         : (String(category).trim() === 'free_fire' ? ['wallet'] : ['wallet', 'moncash', 'natcash'])
@@ -239,7 +243,7 @@ app.post('/api/products', async (req, res) => {
 app.put('/api/products/:id', async (req, res) => {
   try {
     const { id } = req.params;
-    const currentProds = await fetchProductsFromSupabase();
+    const currentProds = await fetchProductsFromSupabase(products);
     const index = currentProds.findIndex(p => p.id === id);
     if (index === -1) {
       return res.status(404).json({ error: 'Produit introuvable.' });
@@ -286,26 +290,28 @@ app.put('/api/products/:id/pins', async (req, res) => {
   try {
     const { id } = req.params;
     const { pinCodes } = req.body || {};
-    const prods = await fetchProductsFromSupabase();
+    const prods = await fetchProductsFromSupabase(products);
     const product = prods.find(p => p.id === id);
     if (!product) {
       return res.status(404).json({ error: 'Produit introuvable.' });
     }
 
     if (Array.isArray(pinCodes)) {
-      product.pinCodes = pinCodes.map((p: string) => String(p).trim()).filter(Boolean);
-      if (product.pinCodes.length > product.stock) {
-        product.stock = product.pinCodes.length;
+      const cleanedPins = pinCodes.map((p: string) => String(p).trim()).filter(Boolean);
+      product.pinCodes = cleanedPins;
+      if (cleanedPins.length > product.stock) {
+        product.stock = cleanedPins.length;
       }
     }
 
-    const localProd = products.find(p => p.id === id);
-    if (localProd) {
-      localProd.pinCodes = product.pinCodes;
-      localProd.stock = product.stock;
+    const localIndex = products.findIndex(p => p.id === id);
+    if (localIndex !== -1) {
+      products[localIndex] = product;
+    } else {
+      products.unshift(product);
     }
     saveDataStore();
-    await syncProductToSupabase(product);
+    syncProductToSupabase(product).catch(err => console.error('[Supabase] Sync product pins error:', err));
 
     res.json({ message: 'Codes PINs du produit mis à jour avec succès.', product });
   } catch (err: any) {
@@ -629,7 +635,7 @@ app.post('/api/orders', async (req, res) => {
   try {
     const { userEmail, productId, gamePlayerId, paymentMethod, natcashTransactionId } = req.body || {};
 
-    const allProducts = await fetchProductsFromSupabase();
+    const allProducts = await fetchProductsFromSupabase(products);
     const product = allProducts.find(p => p.id === productId);
     if (!product) {
       return res.status(404).json({ error: 'Produit non trouvé.' });
@@ -767,7 +773,7 @@ app.put('/api/orders/:id', async (req, res) => {
     if (pinCode) {
       order.pinCodeDelivered = pinCode;
     } else if (status === 'reussi' && !order.pinCodeDelivered) {
-      const allProducts = await fetchProductsFromSupabase();
+      const allProducts = await fetchProductsFromSupabase(products);
       const product = allProducts.find(p => p.id === order.productId);
       let pinDelivered = undefined;
       if (product && product.pinCodes && product.pinCodes.length > 0) {

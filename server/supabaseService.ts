@@ -35,11 +35,53 @@ export const supabaseServer = isSupabaseServerConfigured
 
 export const supabaseAdmin = supabaseServer;
 
+const handleSupabaseError = (action: string, err: any) => {
+  const msg = err?.message || String(err || '');
+  if (
+    msg.includes('fetch failed') ||
+    msg.includes('ENOTFOUND') ||
+    msg.includes('ECONNREFUSED') ||
+    msg.includes('ETIMEDOUT') ||
+    msg.includes('network') ||
+    msg.includes('Failed to fetch') ||
+    msg.includes('TypeError')
+  ) {
+    // Network unavailable / Supabase offline: silent fallback to local storage
+    return;
+  }
+  console.warn(`[Supabase] ${action}:`, msg);
+};
+
 // ============================================================================
 // FETCH HELPERS WITH DB QUERY & SAFE INITIAL FALLBACK
 // ============================================================================
 
-export const fetchProductsFromSupabase = async (): Promise<Product[]> => {
+export const parsePinCodes = (rawPins: any): string[] => {
+  if (!rawPins) return [];
+  if (Array.isArray(rawPins)) {
+    return rawPins.map(p => String(p).trim()).filter(Boolean);
+  }
+  if (typeof rawPins === 'string') {
+    const trimmed = rawPins.trim();
+    if (!trimmed) return [];
+    if (trimmed.startsWith('[') && trimmed.endsWith(']')) {
+      try {
+        const parsed = JSON.parse(trimmed);
+        if (Array.isArray(parsed)) {
+          return parsed.map(p => String(p).trim()).filter(Boolean);
+        }
+      } catch { /* ignore */ }
+    }
+    if (trimmed.startsWith('{') && trimmed.endsWith('}')) {
+      const inner = trimmed.slice(1, -1);
+      return inner.split(',').map(s => s.replace(/^"|"$/g, '').trim()).filter(Boolean);
+    }
+    return trimmed.split(/[\n,]+/).map(s => s.trim()).filter(Boolean);
+  }
+  return [];
+};
+
+export const fetchProductsFromSupabase = async (localProductsFallback?: Product[]): Promise<Product[]> => {
   if (supabaseAdmin) {
     try {
       const { data, error } = await supabaseAdmin
@@ -60,6 +102,13 @@ export const fetchProductsFromSupabase = async (): Promise<Product[]> => {
             (i.diamonds && numDiamonds && i.diamonds === numDiamonds) ||
             (i.priceHTG && !isNaN(numPrice) && numPrice > 0 && i.priceHTG === numPrice) ||
             (p.name && i.name && p.name.toLowerCase().trim() === i.name.toLowerCase().trim())
+          );
+
+          // Find match in localProductsFallback
+          const localMatch = localProductsFallback?.find(lp =>
+            lp.id === p.id ||
+            (lp.diamonds && numDiamonds && lp.diamonds === numDiamonds) ||
+            (lp.priceHTG && numPrice && lp.priceHTG === numPrice)
           );
 
           // If no initMatch, check if row index corresponds to INITIAL_PRODUCTS
@@ -83,6 +132,11 @@ export const fetchProductsFromSupabase = async (): Promise<Product[]> => {
             ? p.allowed_payment_methods
             : (Array.isArray(p.allowedPaymentMethods) ? p.allowedPaymentMethods : (initMatch?.allowedPaymentMethods || (p.category === 'free_fire' || initMatch?.category === 'free_fire' ? ['wallet'] : ['wallet', 'moncash', 'natcash'])));
 
+          const parsedDbPins = parsePinCodes(p.pin_codes ?? p.pinCodes ?? p.pin_code ?? p.pincodes);
+          const finalPinCodes = parsedDbPins.length > 0
+            ? parsedDbPins
+            : (localMatch?.pinCodes && localMatch.pinCodes.length > 0 ? localMatch.pinCodes : (initMatch?.pinCodes || []));
+
           const productObj: Product = {
             id: p.id || initMatch?.id || `prod-${idx}`,
             name: finalName,
@@ -92,9 +146,9 @@ export const fetchProductsFromSupabase = async (): Promise<Product[]> => {
             bonusDiamonds: finalBonus,
             image: p.image || initMatch?.image || 'https://images.unsplash.com/photo-1542751371-adc38448a05e?auto=format&fit=crop&w=600&q=80',
             description: (p.description && p.description !== 'Produit' && p.description.trim() !== '') ? p.description : (initMatch?.description || 'Top Up par ID Free Fire - Livré à l\'instant'),
-            stock: p.stock !== undefined && p.stock !== null ? Number(p.stock) : (initMatch?.stock ?? 100),
+            stock: p.stock !== undefined && p.stock !== null ? Number(p.stock) : (finalPinCodes.length > 0 ? finalPinCodes.length : (initMatch?.stock ?? 100)),
             isPopular: p.is_popular !== undefined && p.is_popular !== null ? Boolean(p.is_popular) : Boolean(p.isPopular ?? initMatch?.isPopular),
-            pinCodes: Array.isArray(p.pin_codes) ? p.pin_codes : (Array.isArray(p.pinCodes) ? p.pinCodes : (initMatch?.pinCodes || [])),
+            pinCodes: finalPinCodes,
             allowedPaymentMethods: allowedMethods
           };
 
@@ -188,7 +242,7 @@ export const fetchProductsFromSupabase = async (): Promise<Product[]> => {
         }
       }
     } catch (err) {
-      console.warn('[Supabase] Erreur lecture table products:', err);
+      handleSupabaseError('Erreur lecture table products', err);
     }
   }
 
@@ -216,7 +270,7 @@ export const fetchNatcashConfigFromSupabase = async (): Promise<NatcashConfig> =
         };
       }
     } catch (err) {
-      console.warn('[Supabase] Erreur lecture natcash_config:', err);
+      handleSupabaseError('Erreur lecture natcash_config', err);
     }
   }
   return INITIAL_NATCASH_CONFIG;
@@ -247,7 +301,7 @@ export const fetchDepositsFromSupabase = async (email?: string): Promise<WalletD
         }));
       }
     } catch (err) {
-      console.warn('[Supabase] Erreur lecture wallet_deposits:', err);
+      handleSupabaseError('Erreur lecture wallet_deposits', err);
     }
   }
   return [];
@@ -279,7 +333,7 @@ export const fetchOrdersFromSupabase = async (email?: string): Promise<Order[]> 
         }));
       }
     } catch (err) {
-      console.warn('[Supabase] Erreur lecture orders:', err);
+      handleSupabaseError('Erreur lecture orders', err);
     }
   }
   return [];
@@ -345,7 +399,7 @@ export const fetchUsersFromSupabase = async (fallbackUsers: UserProfile[] = []):
         }
       }
     } catch (err) {
-      console.warn('[Supabase Auth List Warning]:', err);
+      handleSupabaseError('Auth list warning', err);
     }
 
     // 3b. Query Supabase DB 'users' Table
@@ -370,7 +424,7 @@ export const fetchUsersFromSupabase = async (fallbackUsers: UserProfile[] = []):
         }
       }
     } catch (err) {
-      console.warn('[Supabase DB Users Warning]:', err);
+      handleSupabaseError('DB users warning', err);
     }
   }
 
@@ -407,7 +461,7 @@ export const fetchTicketsFromSupabase = async (fallbackTickets: ContactTicket[] 
         }
       }
     } catch (err) {
-      console.warn('[Supabase] Erreur lecture tickets:', err);
+      handleSupabaseError('Erreur lecture tickets', err);
     }
   }
 
@@ -438,13 +492,13 @@ export const signUpWithSupabaseAuth = async (email: string, name: string, phone:
     });
 
     if (error) {
-      console.error('[Supabase Auth Error]', error.message);
+      handleSupabaseError('Auth error', error.message);
       return { success: false, error: error.message };
     }
 
     return { success: true, user: data.user, session: data.session };
   } catch (err: any) {
-    console.error('[Supabase Auth Exception]', err);
+    handleSupabaseError('Auth exception', err);
     return { success: false, error: err?.message || 'Erreur Supabase Auth' };
   }
 };
@@ -464,14 +518,15 @@ export const syncNatcashConfigToSupabase = async (config: NatcashConfig) => {
       admin_pin: config.adminPin
     }, { onConflict: 'id' });
   } catch (err) {
-    console.error('[Supabase] Erreur sync natcash_config:', err);
+    handleSupabaseError('Erreur sync natcash_config', err);
   }
 };
 
 export const syncProductToSupabase = async (product: Product) => {
   if (!supabaseAdmin) return;
   try {
-    await supabaseAdmin.from('products').upsert({
+    const pinCodesArr = Array.isArray(product.pinCodes) ? product.pinCodes : [];
+    const { error } = await supabaseAdmin.from('products').upsert({
       id: product.id,
       name: product.name,
       category: product.category,
@@ -482,11 +537,38 @@ export const syncProductToSupabase = async (product: Product) => {
       description: product.description,
       stock: product.stock,
       is_popular: product.isPopular,
-      pin_codes: product.pinCodes || [],
+      pin_codes: pinCodesArr,
       allowed_payment_methods: product.allowedPaymentMethods || (product.category === 'free_fire' ? ['wallet'] : ['wallet', 'moncash', 'natcash'])
     }, { onConflict: 'id' });
-  } catch (err) {
-    console.error('[Supabase] Erreur sync product:', err);
+
+    if (error) {
+      const msg = String(error.message || '');
+      if (msg.includes('pin_code') || msg.includes('column') || msg.includes('array')) {
+        console.warn('[Supabase] Retrying product sync with json string format:', msg);
+        try {
+          await supabaseAdmin.from('products').upsert({
+            id: product.id,
+            name: product.name,
+            category: product.category,
+            price_htg: product.priceHTG,
+            diamonds: product.diamonds,
+            bonus_diamonds: product.bonusDiamonds,
+            image: product.image,
+            description: product.description,
+            stock: product.stock,
+            is_popular: product.isPopular,
+            pin_codes: JSON.stringify(pinCodesArr),
+            allowed_payment_methods: product.allowedPaymentMethods || (product.category === 'free_fire' ? ['wallet'] : ['wallet', 'moncash', 'natcash'])
+          }, { onConflict: 'id' });
+        } catch {
+          // silent fallback
+        }
+      } else {
+        handleSupabaseError('Erreur sync product', error);
+      }
+    }
+  } catch (err: any) {
+    handleSupabaseError('Erreur sync product', err);
   }
 };
 
@@ -495,7 +577,7 @@ export const deleteProductFromSupabase = async (id: string) => {
   try {
     await supabaseAdmin.from('products').delete().eq('id', id);
   } catch (err) {
-    console.error('[Supabase] Erreur suppression product:', err);
+    handleSupabaseError('Erreur suppression product', err);
   }
 };
 
@@ -513,7 +595,7 @@ export const syncUserToSupabase = async (user: UserProfile) => {
       is_admin: user.isAdmin
     }, { onConflict: 'id' });
   } catch (err) {
-    console.error('[Supabase] Erreur sync user:', err);
+    handleSupabaseError('Erreur sync user', err);
   }
 };
 
@@ -535,7 +617,7 @@ export const syncDepositToSupabase = async (deposit: WalletDeposit) => {
       screenshot_url: deposit.screenshotUrl || null
     }, { onConflict: 'id' });
   } catch (err) {
-    console.error('[Supabase] Erreur sync deposit:', err);
+    handleSupabaseError('Erreur sync deposit', err);
   }
 };
 
@@ -558,7 +640,7 @@ export const syncOrderToSupabase = async (order: Order) => {
       created_at: order.createdAt
     }, { onConflict: 'id' });
   } catch (err) {
-    console.error('[Supabase] Erreur sync order:', err);
+    handleSupabaseError('Erreur sync order', err);
   }
 };
 
@@ -577,6 +659,6 @@ export const syncTicketToSupabase = async (ticket: ContactTicket) => {
       created_at: ticket.createdAt
     }, { onConflict: 'id' });
   } catch (err) {
-    console.error('[Supabase] Erreur sync ticket:', err);
+    handleSupabaseError('Erreur sync ticket', err);
   }
 };
