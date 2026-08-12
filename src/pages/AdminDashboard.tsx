@@ -1,16 +1,17 @@
 import React, { useState, useEffect } from 'react';
 import { useApp } from '../context/AppContext';
-import { Product, WalletDeposit, ContactTicket, UserProfile, AdminStats, UserDetailedMetrics, DepositStatus } from '../types';
-import { Shield, LayoutDashboard, ShoppingBag, Wallet, Settings, MessageSquare, Plus, Trash2, Edit3, CheckCircle2, XCircle, AlertCircle, Save, Users, Award, RefreshCw, KeyRound, Lock, Eye, ArrowLeft, Flame, DollarSign, UserCheck, X, ShieldAlert, CreditCard, Calendar, Clock, Search, Filter, FileText, Check, Copy } from 'lucide-react';
+import { Product, WalletDeposit, ContactTicket, UserProfile, AdminStats, UserDetailedMetrics, DepositStatus, Order } from '../types';
+import { Shield, LayoutDashboard, ShoppingBag, Wallet, Settings, MessageSquare, Plus, Trash2, Edit3, CheckCircle2, XCircle, AlertCircle, Save, Users, Award, RefreshCw, KeyRound, Lock, Eye, ArrowLeft, Flame, DollarSign, UserCheck, X, ShieldAlert, CreditCard, Calendar, Clock, Search, Filter, FileText, Check, Copy, Image as ImageIcon, Package } from 'lucide-react';
 import { ScrollReveal } from '../components/ScrollReveal';
 
-type AdminTab = 'stats' | 'produits' | 'wallet' | 'config' | 'users' | 'contact';
+type AdminTab = 'stats' | 'produits' | 'commandes' | 'wallet' | 'config' | 'users' | 'contact';
 
 export const AdminDashboard: React.FC = () => {
   const {
     products,
     natcashConfig,
     deposits,
+    orders,
     tickets,
     adminStats,
     refreshData,
@@ -72,13 +73,18 @@ export const AdminDashboard: React.FC = () => {
   const [newProdAllowedMoncash, setNewProdAllowedMoncash] = useState(false);
   const [newProdAllowedNatcash, setNewProdAllowedNatcash] = useState(false);
 
-  // Edit Product Price / Payment Methods State
+  // Edit Product Price / Payment Methods / Image State
   const [editingProdId, setEditingProdId] = useState<string | null>(null);
   const [editingPrice, setEditingPrice] = useState<string>('');
   const [editingPaymentMethodsProd, setEditingPaymentMethodsProd] = useState<Product | null>(null);
+  const [editingImageProd, setEditingImageProd] = useState<Product | null>(null);
+  const [editingImageUrl, setEditingImageUrl] = useState<string>('');
   const [editAllowedWallet, setEditAllowedWallet] = useState(true);
   const [editAllowedMoncash, setEditAllowedMoncash] = useState(false);
   const [editAllowedNatcash, setEditAllowedNatcash] = useState(false);
+
+  // Users Tab Search State
+  const [userSearchQuery, setUserSearchQuery] = useState('');
 
   // PIN Codes Security Gate (Password: 04004749+)
   const [isPinSectionUnlocked, setIsPinSectionUnlocked] = useState(false);
@@ -95,6 +101,71 @@ export const AdminDashboard: React.FC = () => {
   const [modalAdminNote, setModalAdminNote] = useState('');
   const [zoomedImage, setZoomedImage] = useState<string | null>(null);
   const [copiedTxId, setCopiedTxId] = useState<string | null>(null);
+
+  // Orders Tab State & Modals
+  const [orderSearchQuery, setOrderSearchQuery] = useState('');
+  const [orderStatusFilter, setOrderStatusFilter] = useState<'all' | 'reussi' | 'en_attente' | 'echoue'>('all');
+  const [orderMethodFilter, setOrderMethodFilter] = useState<'all' | 'wallet' | 'natcash_direct' | 'moncash_direct'>('all');
+  const [selectedOrderModal, setSelectedOrderModal] = useState<Order | null>(null);
+  const [modalOrderStatus, setModalOrderStatus] = useState<'reussi' | 'en_attente' | 'echoue'>('en_attente');
+  const [modalOrderPinCode, setModalOrderPinCode] = useState('');
+  const [isUpdatingOrder, setIsUpdatingOrder] = useState(false);
+
+  const handleOpenOrderModal = (ord: Order) => {
+    setSelectedOrderModal(ord);
+    setModalOrderStatus(ord.status);
+    setModalOrderPinCode(ord.pinCodeDelivered || '');
+  };
+
+  const handleSaveOrderModal = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedOrderModal) return;
+
+    setIsUpdatingOrder(true);
+    try {
+      const res = await fetch(`/api/orders/${selectedOrderModal.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          status: modalOrderStatus,
+          pinCode: modalOrderPinCode.trim() || undefined
+        })
+      });
+
+      const data = await res.json();
+      if (res.ok) {
+        showToast(`Commande ${selectedOrderModal.id} mise à jour avec succès !`, 'success');
+        setSelectedOrderModal(null);
+        await refreshData();
+      } else {
+        showToast(data.error || 'Erreur lors de la mise à jour de la commande.', 'error');
+      }
+    } catch {
+      showToast('Erreur réseau.', 'error');
+    } finally {
+      setIsUpdatingOrder(false);
+    }
+  };
+
+  const filteredOrders = orders.filter(ord => {
+    if (orderStatusFilter !== 'all' && ord.status !== orderStatusFilter) {
+      return false;
+    }
+    if (orderMethodFilter !== 'all' && ord.paymentMethod !== orderMethodFilter) {
+      return false;
+    }
+    if (orderSearchQuery.trim()) {
+      const q = orderSearchQuery.toLowerCase().trim();
+      const matchId = (ord.id || '').toLowerCase().includes(q);
+      const matchUser = (ord.userName || '').toLowerCase().includes(q) || (ord.userEmail || '').toLowerCase().includes(q);
+      const matchPlayerId = (ord.gamePlayerId || '').toLowerCase().includes(q);
+      const matchTx = (ord.natcashTransactionId || '').toLowerCase().includes(q);
+      const matchPin = (ord.pinCodeDelivered || '').toLowerCase().includes(q);
+      const matchProduct = (ord.productName || '').toLowerCase().includes(q);
+      return matchId || matchUser || matchPlayerId || matchTx || matchPin || matchProduct;
+    }
+    return true;
+  });
 
   // Wallet Adjustment Form State
   const [adjustEmail, setAdjustEmail] = useState('');
@@ -372,6 +443,31 @@ export const AdminDashboard: React.FC = () => {
     }
   };
 
+  // Update Product Image URL
+  const handleSaveProductImage = async (productId: string, imageUrl: string) => {
+    if (!imageUrl || !imageUrl.trim()) {
+      showToast('Veuillez fournir une URL d\'image valide.', 'error');
+      return;
+    }
+    try {
+      const res = await fetch(`/api/products/${productId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ image: imageUrl.trim() })
+      });
+      if (res.ok) {
+        showToast('Photo du produit mise à jour avec succès !', 'success');
+        setEditingImageProd(null);
+        setEditingImageUrl('');
+        await refreshData();
+      } else {
+        showToast('Erreur lors de la mise à jour de la photo.', 'error');
+      }
+    } catch {
+      showToast('Erreur réseau.', 'error');
+    }
+  };
+
   // Save PIN Codes for a Product Pack
   const handleSaveProductPins = async (productId: string) => {
     const pinArray = pinsTextarea.split('\n').map(p => p.trim()).filter(Boolean);
@@ -608,6 +704,29 @@ export const AdminDashboard: React.FC = () => {
               <span>Gestion Produits</span>
             </div>
             <span className="px-2 py-0.5 rounded-full bg-slate-800 text-white text-[10px] font-bold">{products.length}</span>
+          </button>
+
+          <button
+            onClick={() => setActiveAdminTab('commandes')}
+            className={`w-full p-3.5 rounded-2xl text-xs font-bold flex items-center justify-between transition-all ${
+              activeAdminTab === 'commandes'
+                ? 'bg-[#1E90FF] text-white shadow-md shadow-blue-500/20'
+                : 'glass-card text-slate-300 hover:bg-slate-900 hover:text-white border border-white/10'
+            }`}
+          >
+            <div className="flex items-center gap-3">
+              <CreditCard className="w-4 h-4 text-[#1E90FF]" />
+              <span>Gestion Commandes</span>
+            </div>
+            {orders.filter(o => o.status === 'en_attente').length > 0 ? (
+              <span className="px-2 py-0.5 rounded-full bg-amber-500 text-black font-black text-[10px] animate-pulse">
+                {orders.filter(o => o.status === 'en_attente').length}
+              </span>
+            ) : (
+              <span className="px-2 py-0.5 rounded-full bg-slate-800 text-slate-300 text-[10px] font-bold">
+                {orders.length}
+              </span>
+            )}
           </button>
 
           <button
@@ -984,9 +1103,17 @@ export const AdminDashboard: React.FC = () => {
                     {products.map(p => (
                       <div key={p.id} className="p-4 rounded-2xl bg-slate-900/90 border border-slate-800 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-xs shadow-sm text-white">
                         <div className="flex items-center gap-3">
-                          <div className="w-10 h-10 rounded-xl bg-slate-950 border border-slate-800 flex items-center justify-center font-black text-amber-400 text-base">
-                            💎
-                          </div>
+                          {p.image ? (
+                            <img
+                              src={p.image}
+                              alt={p.name}
+                              className="w-12 h-12 rounded-xl object-cover border border-slate-700 shrink-0"
+                            />
+                          ) : (
+                            <div className="w-12 h-12 rounded-xl bg-slate-950 border border-slate-800 flex items-center justify-center font-black text-amber-400 text-base shrink-0">
+                              💎
+                            </div>
+                          )}
                           <div>
                             <p className="font-extrabold text-white text-sm">{p.name}</p>
                             <p className="text-[10px] text-slate-400">
@@ -995,7 +1122,7 @@ export const AdminDashboard: React.FC = () => {
                           </div>
                         </div>
 
-                        <div className="flex items-center gap-2 w-full sm:w-auto justify-between sm:justify-end">
+                        <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto justify-between sm:justify-end">
                           {editingProdId === p.id ? (
                             <div className="flex items-center gap-2">
                               <input
@@ -1033,6 +1160,19 @@ export const AdminDashboard: React.FC = () => {
                               </button>
                             </div>
                           )}
+
+                          {/* EDIT PRODUCT IMAGE BUTTON */}
+                          <button
+                            onClick={() => {
+                              setEditingImageProd(p);
+                              setEditingImageUrl(p.image || '');
+                            }}
+                            className="px-2.5 py-1.5 rounded-lg bg-purple-500/20 text-purple-300 hover:bg-purple-600 hover:text-white transition-colors flex items-center gap-1 font-bold text-[11px]"
+                            title="Modifier la photo / image du produit"
+                          >
+                            <ImageIcon className="w-3.5 h-3.5 text-purple-400" />
+                            Photo
+                          </button>
 
                           {/* PAYMENT METHODS BUTTON */}
                           <button
@@ -1130,6 +1270,51 @@ export const AdminDashboard: React.FC = () => {
                       onChange={e => setNewProdStock(e.target.value)}
                       className="px-3.5 py-2 rounded-xl glass-input text-xs text-white placeholder-slate-500"
                     />
+                  </div>
+
+                  {/* Image URL Field */}
+                  <div className="p-3 rounded-xl bg-slate-950/80 border border-slate-800 space-y-2 text-xs">
+                    <label className="font-bold text-slate-300 block">
+                      URL de la Photo / Image du Produit :
+                    </label>
+                    <input
+                      type="url"
+                      placeholder="https://... (Lien de l'image PNG / JPG)"
+                      value={newProdImage}
+                      onChange={e => setNewProdImage(e.target.value)}
+                      className="w-full px-3 py-2 rounded-xl glass-input text-xs text-white placeholder-slate-500 font-mono"
+                    />
+                    <div className="flex flex-wrap gap-1.5 items-center">
+                      <span className="text-[10px] text-slate-400 font-bold">Propositions rapides :</span>
+                      <button
+                        type="button"
+                        onClick={() => setNewProdImage('https://images.unsplash.com/photo-1542751371-adc38448a05e?auto=format&fit=crop&w=800&q=80')}
+                        className="px-2 py-0.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-amber-300 font-bold text-[10px]"
+                      >
+                        🔥 Free Fire Main
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setNewProdImage('https://images.unsplash.com/photo-1511512578047-dfb367046420?auto=format&fit=crop&w=800&q=80')}
+                        className="px-2 py-0.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-blue-300 font-bold text-[10px]"
+                      >
+                        💎 Diamants
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setNewProdImage('https://images.unsplash.com/photo-1538481199705-c710c4e965fc?auto=format&fit=crop&w=800&q=80')}
+                        className="px-2 py-0.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-emerald-300 font-bold text-[10px]"
+                      >
+                        ⚔️ Mobile Legends
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setNewProdImage('https://images.unsplash.com/photo-1556742049-0a670e4a4591?auto=format&fit=crop&w=800&q=80')}
+                        className="px-2 py-0.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-purple-300 font-bold text-[10px]"
+                      >
+                        🎁 Cartes Cadeaux
+                      </button>
+                    </div>
                   </div>
 
                   <textarea
@@ -1272,6 +1457,297 @@ export const AdminDashboard: React.FC = () => {
                       </button>
                     </div>
                   </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* TAB: GESTION DES COMMANDES (MES COMMANDES / ACHATS) */}
+          {activeAdminTab === 'commandes' && (
+            <div className="space-y-6">
+              <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 pb-3 border-b border-white/10">
+                <div>
+                  <h2 className="text-xl font-black text-white flex items-center gap-2">
+                    <CreditCard className="w-6 h-6 text-[#1E90FF]" />
+                    Gestion & Historique de Toutes les Commandes
+                  </h2>
+                  <p className="text-xs text-slate-400">
+                    Consultez, filtrez et validez les commandes des clients (Solde Wallet, NATCASH, MonCash).
+                  </p>
+                </div>
+                <button
+                  onClick={handleManualRefresh}
+                  disabled={isRefreshing}
+                  className="px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold text-xs flex items-center gap-1.5 shadow-sm"
+                >
+                  <RefreshCw className={`w-3.5 h-3.5 text-[#1E90FF] ${isRefreshing ? 'animate-spin' : ''}`} /> Actualiser
+                </button>
+              </div>
+
+              {/* Order Stats Metric Cards */}
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                <div className="p-3.5 rounded-2xl bg-slate-900/90 border border-slate-800 space-y-1">
+                  <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Total Commandes</p>
+                  <p className="text-xl font-black text-white">{orders.length}</p>
+                </div>
+                <div className="p-3.5 rounded-2xl bg-emerald-950/40 border border-emerald-500/30 space-y-1">
+                  <p className="text-[10px] text-emerald-400 font-bold uppercase tracking-wider">Réussies / Livrées</p>
+                  <p className="text-xl font-black text-emerald-400">
+                    {orders.filter(o => o.status === 'reussi').length}
+                  </p>
+                </div>
+                <div className="p-3.5 rounded-2xl bg-amber-950/40 border border-amber-500/30 space-y-1">
+                  <p className="text-[10px] text-amber-400 font-bold uppercase tracking-wider">En Attente</p>
+                  <p className="text-xl font-black text-amber-400">
+                    {orders.filter(o => o.status === 'en_attente').length}
+                  </p>
+                </div>
+                <div className="p-3.5 rounded-2xl bg-rose-950/40 border border-rose-500/30 space-y-1">
+                  <p className="text-[10px] text-rose-400 font-bold uppercase tracking-wider">Échouées / Rejetées</p>
+                  <p className="text-xl font-black text-rose-400">
+                    {orders.filter(o => o.status === 'echoue').length}
+                  </p>
+                </div>
+              </div>
+
+              {/* Search & Filters */}
+              <div className="p-4 rounded-2xl bg-slate-950/90 border border-white/10 space-y-3">
+                <div className="flex flex-col md:flex-row gap-3 items-center justify-between">
+                  {/* Search Bar */}
+                  <div className="relative w-full md:w-1/2">
+                    <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
+                    <input
+                      type="text"
+                      placeholder="Rechercher par ID, Nom, Email, ID Joueur, PIN, Code Tx..."
+                      value={orderSearchQuery}
+                      onChange={(e) => setOrderSearchQuery(e.target.value)}
+                      className="w-full pl-10 pr-4 py-2.5 rounded-xl bg-slate-900 border border-slate-700 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-[#1E90FF]"
+                    />
+                    {orderSearchQuery && (
+                      <button
+                        onClick={() => setOrderSearchQuery('')}
+                        className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-white text-xs"
+                      >
+                        <X className="w-4 h-4" />
+                      </button>
+                    )}
+                  </div>
+
+                  {/* Payment Method Selector */}
+                  <div className="w-full md:w-auto flex items-center gap-2">
+                    <span className="text-xs text-slate-400 font-bold shrink-0">Paiement:</span>
+                    <select
+                      value={orderMethodFilter}
+                      onChange={(e) => setOrderMethodFilter(e.target.value as any)}
+                      className="w-full md:w-auto px-3 py-2 rounded-xl bg-slate-900 border border-slate-700 text-xs text-white focus:outline-none focus:border-[#1E90FF]"
+                    >
+                      <option value="all">Tous les modes</option>
+                      <option value="wallet">Portefeuille (Wallet)</option>
+                      <option value="natcash_direct">NATCASH Direct</option>
+                      <option value="moncash_direct">MonCash Direct</option>
+                    </select>
+                  </div>
+                </div>
+
+                {/* Status Filter Buttons */}
+                <div className="flex flex-wrap gap-2 pt-2 border-t border-slate-800">
+                  <span className="text-xs text-slate-400 font-bold flex items-center gap-1 my-auto mr-1">
+                    <Filter className="w-3.5 h-3.5" /> Statut:
+                  </span>
+                  <button
+                    onClick={() => setOrderStatusFilter('all')}
+                    className={`px-3 py-1 rounded-xl text-xs font-bold transition-all ${
+                      orderStatusFilter === 'all'
+                        ? 'bg-[#1E90FF] text-white shadow'
+                        : 'bg-slate-900 text-slate-400 hover:text-white border border-slate-800'
+                    }`}
+                  >
+                    Toutes ({orders.length})
+                  </button>
+                  <button
+                    onClick={() => setOrderStatusFilter('en_attente')}
+                    className={`px-3 py-1 rounded-xl text-xs font-bold transition-all ${
+                      orderStatusFilter === 'en_attente'
+                        ? 'bg-amber-500 text-black font-black'
+                        : 'bg-slate-900 text-amber-400 hover:text-white border border-slate-800'
+                    }`}
+                  >
+                    🟡 En Attente ({orders.filter(o => o.status === 'en_attente').length})
+                  </button>
+                  <button
+                    onClick={() => setOrderStatusFilter('reussi')}
+                    className={`px-3 py-1 rounded-xl text-xs font-bold transition-all ${
+                      orderStatusFilter === 'reussi'
+                        ? 'bg-emerald-500 text-black font-black'
+                        : 'bg-slate-900 text-emerald-400 hover:text-white border border-slate-800'
+                    }`}
+                  >
+                    🟢 Réussies ({orders.filter(o => o.status === 'reussi').length})
+                  </button>
+                  <button
+                    onClick={() => setOrderStatusFilter('echoue')}
+                    className={`px-3 py-1 rounded-xl text-xs font-bold transition-all ${
+                      orderStatusFilter === 'echoue'
+                        ? 'bg-rose-500 text-white font-black'
+                        : 'bg-slate-900 text-rose-400 hover:text-white border border-slate-800'
+                    }`}
+                  >
+                    🔴 Échouées ({orders.filter(o => o.status === 'echoue').length})
+                  </button>
+                </div>
+              </div>
+
+              {/* Orders List */}
+              {filteredOrders.length === 0 ? (
+                <div className="p-8 text-center rounded-2xl bg-slate-900/50 border border-slate-800 space-y-2">
+                  <CreditCard className="w-10 h-10 text-slate-600 mx-auto" />
+                  <p className="text-sm font-bold text-slate-400">Aucune commande ne correspond aux critères</p>
+                  <p className="text-xs text-slate-500">
+                    {orderSearchQuery || orderStatusFilter !== 'all' || orderMethodFilter !== 'all'
+                      ? "Essayez de modifier votre recherche ou de changer les filtres."
+                      : "Aucune commande enregistrée pour le moment."}
+                  </p>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {filteredOrders.map(ord => {
+                    const ordDate = new Date(ord.createdAt);
+                    const formattedDate = ordDate.toLocaleDateString('fr-FR', {
+                      weekday: 'long',
+                      year: 'numeric',
+                      month: 'long',
+                      day: 'numeric'
+                    });
+                    const formattedTime = ordDate.toLocaleTimeString('fr-FR', {
+                      hour: '2-digit',
+                      minute: '2-digit',
+                      second: '2-digit'
+                    });
+
+                    return (
+                      <div
+                        key={ord.id}
+                        className={`p-4 rounded-2xl border transition-all ${
+                          ord.status === 'en_attente'
+                            ? 'bg-amber-950/20 border-amber-500/40 shadow-lg shadow-amber-950/20'
+                            : ord.status === 'reussi'
+                            ? 'bg-slate-900/90 border-slate-800 hover:border-slate-700'
+                            : 'bg-rose-950/20 border-rose-500/30'
+                        }`}
+                      >
+                        <div className="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-4">
+                          <div className="space-y-1.5 flex-1">
+                            <div className="flex flex-wrap items-center gap-2">
+                              <span className="font-mono text-xs font-black text-[#1E90FF] bg-blue-500/10 px-2 py-0.5 rounded-lg border border-blue-500/20">
+                                #{ord.id}
+                              </span>
+
+                              {ord.status === 'reussi' && (
+                                <span className="px-2 py-0.5 rounded-full bg-emerald-500/20 border border-emerald-500/30 text-emerald-400 font-extrabold text-[10px] flex items-center gap-1">
+                                  <CheckCircle2 className="w-3 h-3" /> Réussie / Livrée
+                                </span>
+                              )}
+                              {ord.status === 'en_attente' && (
+                                <span className="px-2 py-0.5 rounded-full bg-amber-500/20 border border-amber-500/30 text-amber-300 font-extrabold text-[10px] flex items-center gap-1 animate-pulse">
+                                  <AlertCircle className="w-3 h-3" /> En Attente de Validation
+                                </span>
+                              )}
+                              {ord.status === 'echoue' && (
+                                <span className="px-2 py-0.5 rounded-full bg-rose-500/20 border border-rose-500/30 text-rose-400 font-extrabold text-[10px] flex items-center gap-1">
+                                  <XCircle className="w-3 h-3" /> Échouée / Rejetée
+                                </span>
+                              )}
+
+                              <span className="text-[10px] text-slate-400 font-bold px-2 py-0.5 rounded-lg bg-slate-800 border border-slate-700">
+                                {ord.paymentMethod === 'wallet' ? 'Portefeuille (Wallet)' : ord.paymentMethod === 'moncash_direct' ? 'MonCash Direct' : 'NATCASH Direct'}
+                              </span>
+                            </div>
+
+                            <div className="flex flex-wrap items-center gap-3 text-xs text-slate-300">
+                              <p className="font-bold text-white flex items-center gap-1.5">
+                                <Users className="w-3.5 h-3.5 text-slate-400" />
+                                {ord.userName}
+                                <span className="text-slate-400 font-normal">({ord.userEmail})</span>
+                              </p>
+                              <span className="text-slate-600">•</span>
+                              <p className="text-slate-400 flex items-center gap-1">
+                                <Clock className="w-3.5 h-3.5" />
+                                {formattedDate} à {formattedTime}
+                              </p>
+                            </div>
+
+                            <div className="flex flex-wrap items-center gap-4 text-xs pt-1">
+                              <div>
+                                <span className="text-[10px] text-slate-500 font-bold uppercase block">Produit</span>
+                                <span className="font-extrabold text-white">{ord.productName}</span>
+                              </div>
+                              <div>
+                                <span className="text-[10px] text-slate-500 font-bold uppercase block">Montant</span>
+                                <span className="font-black text-[#1E90FF]">{ord.priceHTG.toLocaleString('fr-FR')} HTG</span>
+                              </div>
+                              <div>
+                                <span className="text-[10px] text-slate-500 font-bold uppercase block">ID Joueur Free Fire</span>
+                                <div className="flex items-center gap-1">
+                                  <span className="font-mono font-black text-amber-400 bg-amber-950/40 px-2 py-0.5 rounded border border-amber-500/30">
+                                    {ord.gamePlayerId || 'N/A'}
+                                  </span>
+                                  {ord.gamePlayerId && (
+                                    <button
+                                      onClick={() => {
+                                        navigator.clipboard.writeText(ord.gamePlayerId);
+                                        showToast('ID Joueur copié !', 'info');
+                                      }}
+                                      title="Copier ID Joueur"
+                                      className="p-1 text-slate-400 hover:text-white"
+                                    >
+                                      <Copy className="w-3.5 h-3.5" />
+                                    </button>
+                                  )}
+                                </div>
+                              </div>
+
+                              {ord.natcashTransactionId && (
+                                <div>
+                                  <span className="text-[10px] text-slate-500 font-bold uppercase block">Code Transaction Tx</span>
+                                  <span className="font-mono font-bold text-slate-300 bg-slate-800 px-2 py-0.5 rounded">
+                                    {ord.natcashTransactionId}
+                                  </span>
+                                </div>
+                              )}
+                            </div>
+
+                            {ord.pinCodeDelivered && (
+                              <div className="pt-2 flex items-center gap-2">
+                                <span className="text-xs font-bold text-slate-400">PIN Livré:</span>
+                                <span className="font-mono font-black text-emerald-400 bg-emerald-950/50 px-2.5 py-1 rounded-lg border border-emerald-500/40 text-xs tracking-wider">
+                                  {ord.pinCodeDelivered}
+                                </span>
+                                <button
+                                  onClick={() => {
+                                    navigator.clipboard.writeText(ord.pinCodeDelivered!);
+                                    showToast('Code PIN copié !', 'info');
+                                  }}
+                                  className="p-1 text-slate-400 hover:text-white"
+                                  title="Copier le PIN"
+                                >
+                                  <Copy className="w-3.5 h-3.5" />
+                                </button>
+                              </div>
+                            )}
+                          </div>
+
+                          <div className="flex items-center gap-2 w-full lg:w-auto justify-end pt-2 lg:pt-0 border-t lg:border-t-0 border-slate-800">
+                            <button
+                              onClick={() => handleOpenOrderModal(ord)}
+                              className="px-3.5 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-extrabold flex items-center gap-1.5 border border-slate-700 shadow-sm"
+                            >
+                              <Edit3 className="w-3.5 h-3.5 text-[#1E90FF]" /> Modifier / Valider
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
                 </div>
               )}
             </div>
@@ -1828,65 +2304,161 @@ export const AdminDashboard: React.FC = () => {
             </form>
           )}
 
-          {/* TAB 5: USERS LIST WITH DETAILED MODAL */}
-          {activeAdminTab === 'users' && (
-            <div className="space-y-4 text-white">
-              <div className="flex items-center justify-between pb-3 border-b border-white/10">
-                <h2 className="text-xl font-black text-white">Utilisateurs Enregistrés & Profils</h2>
-                <span className="text-xs text-slate-400 font-bold">
-                  Cliquez sur un utilisateur pour voir sa fiche complète
-                </span>
-              </div>
+          {/* TAB 5: USERS LIST WITH DETAILED MODAL & LIVE SEARCH SUGGESTIONS */}
+          {activeAdminTab === 'users' && (() => {
+            const filteredUsersList = detailedUsers.filter(u => {
+              if (!userSearchQuery.trim()) return true;
+              const q = userSearchQuery.toLowerCase().trim();
+              const nameMatch = (u.name || '').toLowerCase().includes(q);
+              const emailMatch = (u.email || '').toLowerCase().includes(q);
+              const phoneMatch = (u.phone || '').toLowerCase().includes(q);
+              const idMatch = (u.id || '').toLowerCase().includes(q);
+              return nameMatch || emailMatch || phoneMatch || idMatch;
+            });
 
-              <div className="overflow-x-auto">
-                <table className="w-full text-left text-xs text-slate-300">
-                  <thead>
-                    <tr className="border-b border-slate-800 text-slate-400 uppercase font-bold text-[10px]">
-                      <th className="py-2.5 px-3">Nom</th>
-                      <th className="py-2.5 px-3">Email</th>
-                      <th className="py-2.5 px-3">Téléphone</th>
-                      <th className="py-2.5 px-3">Solde Wallet</th>
-                      <th className="py-2.5 px-3">Commandes</th>
-                      <th className="py-2.5 px-3">Action</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-800/80">
-                    {detailedUsers.map(u => (
-                      <tr
-                        key={u.id}
-                        onClick={() => setSelectedUserModal(u)}
-                        className="hover:bg-slate-900/80 cursor-pointer transition-colors"
+            return (
+              <div className="space-y-4 text-white">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-white/10">
+                  <div>
+                    <h2 className="text-xl font-black text-white">Utilisateurs Enregistrés & Profils</h2>
+                    <p className="text-xs text-slate-400">
+                      Recherche instantanée par nom, email, ID utilisateur ou numéro de téléphone.
+                    </p>
+                  </div>
+                  <span className="text-xs font-mono font-bold px-3 py-1.5 rounded-xl bg-blue-500/20 text-[#1E90FF] border border-blue-500/30 self-start sm:self-auto">
+                    {filteredUsersList.length} / {detailedUsers.length} Utilisateur(s)
+                  </span>
+                </div>
+
+                {/* SEARCH INPUT WITH LIVE SUGGESTIONS */}
+                <div className="space-y-2">
+                  <div className="relative flex items-center">
+                    <Search className="w-4 h-4 text-[#1E90FF] absolute left-3.5 pointer-events-none" />
+                    <input
+                      type="text"
+                      placeholder="Rechercher utilisateur (Tapez un Nom, Email, ID ex: usr-..., ou Téléphone)..."
+                      value={userSearchQuery}
+                      onChange={e => setUserSearchQuery(e.target.value)}
+                      className="w-full pl-10 pr-10 py-3 rounded-2xl bg-slate-900 border border-slate-700 text-xs text-white placeholder-slate-400 focus:border-[#1E90FF] focus:ring-1 focus:ring-[#1E90FF] font-medium shadow-inner"
+                    />
+                    {userSearchQuery && (
+                      <button
+                        onClick={() => setUserSearchQuery('')}
+                        className="absolute right-3.5 p-1 rounded-full bg-slate-800 text-slate-400 hover:text-white"
+                        title="Effacer la recherche"
                       >
-                        <td className="py-3 px-3 font-bold text-white flex items-center gap-2">
-                          <div className="w-7 h-7 rounded-full bg-[#1E90FF]/20 text-[#1E90FF] font-black flex items-center justify-center text-xs">
-                            {u.name.charAt(0).toUpperCase()}
-                          </div>
-                          {u.name}
-                        </td>
-                        <td className="py-3 px-3 text-slate-400">{u.email}</td>
-                        <td className="py-3 px-3 font-mono text-slate-300">{u.phone}</td>
-                        <td className="py-3 px-3 font-black text-[#1E90FF]">{u.walletBalanceHTG} HTG</td>
-                        <td className="py-3 px-3 font-bold text-emerald-400">
-                          {u.totalPurchasesCount || 0} achats
-                        </td>
-                        <td className="py-3 px-3">
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              setSelectedUserModal(u);
-                            }}
-                            className="px-2.5 py-1 rounded-lg bg-blue-500/20 text-[#1E90FF] font-bold text-[10px] hover:bg-[#1E90FF] hover:text-white"
-                          >
-                            Fiche Profil
-                          </button>
-                        </td>
+                        <X className="w-3.5 h-3.5" />
+                      </button>
+                    )}
+                  </div>
+
+                  {/* INSTANT LIVE SUGGESTIONS CARDS */}
+                  {userSearchQuery.trim().length >= 1 && (
+                    <div className="p-3.5 rounded-2xl bg-slate-900/95 border border-blue-500/30 shadow-2xl space-y-2 animate-fade-in">
+                      <div className="flex items-center justify-between text-[11px] font-bold text-slate-300">
+                        <span className="flex items-center gap-1.5 text-[#1E90FF]">
+                          🔍 Suggestions instantanées pour "{userSearchQuery}" :
+                        </span>
+                        <span>{filteredUsersList.length} trouvé(s)</span>
+                      </div>
+
+                      {filteredUsersList.length === 0 ? (
+                        <p className="text-xs text-amber-400 font-semibold p-2">
+                          Aucun utilisateur ne correspond à votre recherche.
+                        </p>
+                      ) : (
+                        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2">
+                          {filteredUsersList.slice(0, 6).map(u => (
+                            <div
+                              key={u.id || u.email}
+                              onClick={() => setSelectedUserModal(u)}
+                              className="p-3 rounded-xl bg-slate-950/90 border border-slate-800 hover:border-[#1E90FF] cursor-pointer transition-all flex items-center justify-between text-xs group hover:scale-[1.02] shadow-md"
+                            >
+                              <div className="space-y-0.5 min-w-0 pr-2">
+                                <p className="font-extrabold text-white truncate group-hover:text-[#1E90FF]">
+                                  {u.name}
+                                </p>
+                                <p className="text-[10px] text-slate-400 truncate">{u.email}</p>
+                                <div className="flex items-center gap-2 text-[10px] text-slate-500 font-mono">
+                                  <span>ID: {u.id}</span>
+                                  <span>• {u.phone}</span>
+                                </div>
+                              </div>
+                              <span className="text-[10px] font-black text-[#1E90FF] bg-blue-500/10 px-2 py-1 rounded-lg border border-blue-500/20 shrink-0">
+                                {u.walletBalanceHTG} HTG
+                              </span>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+
+                {/* USERS TABLE */}
+                <div className="overflow-x-auto rounded-2xl border border-slate-800 bg-slate-900/60">
+                  <table className="w-full text-left text-xs text-slate-300">
+                    <thead>
+                      <tr className="border-b border-slate-800 bg-slate-950/80 text-slate-400 uppercase font-bold text-[10px]">
+                        <th className="py-3 px-3">Nom / ID</th>
+                        <th className="py-3 px-3">Email</th>
+                        <th className="py-3 px-3">Téléphone</th>
+                        <th className="py-3 px-3">Solde Wallet</th>
+                        <th className="py-3 px-3">Commandes</th>
+                        <th className="py-3 px-3">Action</th>
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
+                    </thead>
+                    <tbody className="divide-y divide-slate-800/80">
+                      {filteredUsersList.length === 0 ? (
+                        <tr>
+                          <td colSpan={6} className="py-8 text-center text-slate-400 font-semibold">
+                            Aucun utilisateur trouvé avec ces critères de recherche.
+                          </td>
+                        </tr>
+                      ) : (
+                        filteredUsersList.map(u => (
+                          <tr
+                            key={u.id}
+                            onClick={() => setSelectedUserModal(u)}
+                            className="hover:bg-slate-900/80 cursor-pointer transition-colors"
+                          >
+                            <td className="py-3 px-3 font-bold text-white">
+                              <div className="flex items-center gap-2">
+                                <div className="w-7 h-7 rounded-full bg-[#1E90FF]/20 text-[#1E90FF] font-black flex items-center justify-center text-xs shrink-0">
+                                  {u.name ? u.name.charAt(0).toUpperCase() : 'U'}
+                                </div>
+                                <div>
+                                  <p className="font-extrabold text-white text-xs">{u.name}</p>
+                                  <p className="text-[9px] font-mono text-slate-500">ID: {u.id}</p>
+                                </div>
+                              </div>
+                            </td>
+                            <td className="py-3 px-3 text-slate-300 font-medium">{u.email}</td>
+                            <td className="py-3 px-3 font-mono text-slate-300">{u.phone}</td>
+                            <td className="py-3 px-3 font-black text-[#1E90FF]">{u.walletBalanceHTG} HTG</td>
+                            <td className="py-3 px-3 font-bold text-emerald-400">
+                              {u.totalPurchasesCount || 0} achats
+                            </td>
+                            <td className="py-3 px-3">
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setSelectedUserModal(u);
+                                }}
+                                className="px-2.5 py-1 rounded-lg bg-blue-500/20 text-[#1E90FF] font-bold text-[10px] hover:bg-[#1E90FF] hover:text-white transition-colors"
+                              >
+                                Fiche Profil
+                              </button>
+                            </td>
+                          </tr>
+                        ))
+                      )}
+                    </tbody>
+                  </table>
+                </div>
               </div>
-            </div>
-          )}
+            );
+          })()}
 
           {/* TAB 6: CONTACT TICKETS */}
           {activeAdminTab === 'contact' && (
@@ -2345,6 +2917,261 @@ export const AdminDashboard: React.FC = () => {
               <X className="w-6 h-6" />
             </button>
             <img src={zoomedImage} alt="Preuve de paiement" className="max-w-full max-h-[85vh] rounded-2xl border border-slate-700 shadow-2xl object-contain" />
+          </div>
+        </div>
+      )}
+
+      {/* Product Image Editing Modal */}
+      {editingImageProd && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-fade-in">
+          <div className="w-full max-w-md p-6 rounded-3xl bg-slate-900 border border-slate-700 shadow-2xl space-y-4 text-white">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-800">
+              <h3 className="font-extrabold text-base text-white flex items-center gap-2">
+                <ImageIcon className="w-5 h-5 text-purple-400" />
+                Changer la Photo du Produit
+              </h3>
+              <button onClick={() => setEditingImageProd(null)} className="p-1.5 rounded-xl bg-slate-800 text-slate-400 hover:text-white">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="space-y-3 text-xs">
+              <p className="font-bold text-slate-300">Produit : <span className="text-[#1E90FF]">{editingImageProd.name}</span></p>
+
+              {/* Live Image Preview */}
+              <div className="flex justify-center p-3 rounded-2xl bg-slate-950 border border-slate-800 min-h-[100px] items-center">
+                {editingImageUrl ? (
+                  <img
+                    src={editingImageUrl}
+                    alt="Aperçu du produit"
+                    className="max-h-40 rounded-xl object-contain border border-slate-700 shadow-md"
+                    onError={(e) => {
+                      (e.target as HTMLElement).style.display = 'none';
+                    }}
+                  />
+                ) : (
+                  <span className="text-slate-500 italic py-6">Aucune image configurée (Entrez une URL ci-dessous)</span>
+                )}
+              </div>
+
+              <div>
+                <label className="block text-[11px] font-bold text-slate-300 mb-1">URL de la photo / image :</label>
+                <input
+                  type="url"
+                  placeholder="https://... (Lien direct JPG, PNG ou WebP)"
+                  value={editingImageUrl}
+                  onChange={e => setEditingImageUrl(e.target.value)}
+                  className="w-full px-3 py-2.5 rounded-xl bg-slate-950 border border-slate-700 text-white placeholder-slate-500 text-xs font-mono"
+                />
+              </div>
+
+              {/* Suggestions / Presets */}
+              <div>
+                <label className="block text-[10px] font-bold text-slate-400 mb-1">Choix rapides d'images populaires :</label>
+                <div className="flex flex-wrap gap-1.5">
+                  <button
+                    type="button"
+                    onClick={() => setEditingImageUrl('https://images.unsplash.com/photo-1542751371-adc38448a05e?auto=format&fit=crop&w=800&q=80')}
+                    className="px-2.5 py-1 rounded-xl bg-slate-800 hover:bg-slate-700 text-amber-300 font-bold text-[10px]"
+                  >
+                    🔥 Free Fire Main
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setEditingImageUrl('https://images.unsplash.com/photo-1511512578047-dfb367046420?auto=format&fit=crop&w=800&q=80')}
+                    className="px-2.5 py-1 rounded-xl bg-slate-800 hover:bg-slate-700 text-blue-300 font-bold text-[10px]"
+                  >
+                    💎 Diamants FF
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setEditingImageUrl('https://images.unsplash.com/photo-1538481199705-c710c4e965fc?auto=format&fit=crop&w=800&q=80')}
+                    className="px-2.5 py-1 rounded-xl bg-slate-800 hover:bg-slate-700 text-emerald-300 font-bold text-[10px]"
+                  >
+                    ⚔️ Mobile Legends
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setEditingImageUrl('https://images.unsplash.com/photo-1556742049-0a670e4a4591?auto=format&fit=crop&w=800&q=80')}
+                    className="px-2.5 py-1 rounded-xl bg-slate-800 hover:bg-slate-700 text-purple-300 font-bold text-[10px]"
+                  >
+                    🎁 Cartes Cadeaux
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <div className="flex justify-end gap-2 pt-3 border-t border-slate-800">
+              <button
+                type="button"
+                onClick={() => setEditingImageProd(null)}
+                className="px-4 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-bold"
+              >
+                Annuler
+              </button>
+              <button
+                type="button"
+                onClick={() => handleSaveProductImage(editingImageProd.id, editingImageUrl)}
+                className="px-4 py-2.5 rounded-xl bg-purple-600 hover:bg-purple-500 text-white text-xs font-extrabold shadow-md"
+              >
+                Enregistrer la Photo
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL: Traiter / Valider une commande */}
+      {selectedOrderModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-fade-in">
+          <div className="w-full max-w-lg p-6 rounded-3xl bg-slate-900 border border-white/20 shadow-2xl space-y-5 text-white">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-800">
+              <h3 className="text-base font-extrabold text-white flex items-center gap-2">
+                <CreditCard className="w-5 h-5 text-[#1E90FF]" />
+                Traiter Commande #{selectedOrderModal.id}
+              </h3>
+              <button
+                onClick={() => setSelectedOrderModal(null)}
+                className="p-1.5 rounded-xl bg-slate-800 text-slate-400 hover:text-white"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="space-y-3 text-xs">
+              <div className="p-3 rounded-2xl bg-slate-950 border border-slate-800 space-y-1.5">
+                <div className="flex justify-between">
+                  <span className="text-slate-400">Client:</span>
+                  <span className="font-bold text-white">{selectedOrderModal.userName} ({selectedOrderModal.userEmail})</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-slate-400">Produit & Prix:</span>
+                  <span className="font-extrabold text-[#1E90FF]">{selectedOrderModal.productName} — {selectedOrderModal.priceHTG.toLocaleString('fr-FR')} HTG</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-slate-400">ID Joueur Free Fire:</span>
+                  <div className="flex items-center gap-1">
+                    <span className="font-mono font-black text-amber-400 bg-amber-950/60 px-2 py-0.5 rounded">
+                      {selectedOrderModal.gamePlayerId || 'N/A'}
+                    </span>
+                    {selectedOrderModal.gamePlayerId && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          navigator.clipboard.writeText(selectedOrderModal.gamePlayerId);
+                          showToast('ID Joueur copié !', 'info');
+                        }}
+                        className="p-0.5 text-slate-400 hover:text-white"
+                      >
+                        <Copy className="w-3.5 h-3.5" />
+                      </button>
+                    )}
+                  </div>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-slate-400">Paiement:</span>
+                  <span className="font-bold text-white uppercase">{selectedOrderModal.paymentMethod}</span>
+                </div>
+                {selectedOrderModal.natcashTransactionId && (
+                  <div className="flex justify-between">
+                    <span className="text-slate-400">Transaction Tx:</span>
+                    <span className="font-mono font-bold text-slate-200">{selectedOrderModal.natcashTransactionId}</span>
+                  </div>
+                )}
+                <div className="flex justify-between">
+                  <span className="text-slate-400">Date/Heure:</span>
+                  <span className="text-slate-300">
+                    {new Date(selectedOrderModal.createdAt).toLocaleDateString('fr-FR')} à {new Date(selectedOrderModal.createdAt).toLocaleTimeString('fr-FR')}
+                  </span>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-extrabold text-slate-300 mb-1.5">Statut de la commande :</label>
+                <div className="grid grid-cols-3 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setModalOrderStatus('reussi')}
+                    className={`p-2.5 rounded-xl text-xs font-bold flex flex-col items-center justify-center gap-1 border transition-all ${
+                      modalOrderStatus === 'reussi'
+                        ? 'bg-emerald-500/20 border-emerald-500 text-emerald-300 ring-2 ring-emerald-500/30'
+                        : 'bg-slate-950 border-slate-800 text-slate-400 hover:text-white'
+                    }`}
+                  >
+                    <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+                    <span>🟢 Réussie / Livrée</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setModalOrderStatus('en_attente')}
+                    className={`p-2.5 rounded-xl text-xs font-bold flex flex-col items-center justify-center gap-1 border transition-all ${
+                      modalOrderStatus === 'en_attente'
+                        ? 'bg-amber-500/20 border-amber-500 text-amber-300 ring-2 ring-amber-500/30'
+                        : 'bg-slate-950 border-slate-800 text-slate-400 hover:text-white'
+                    }`}
+                  >
+                    <AlertCircle className="w-4 h-4 text-amber-400" />
+                    <span>🟡 En Attente</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setModalOrderStatus('echoue')}
+                    className={`p-2.5 rounded-xl text-xs font-bold flex flex-col items-center justify-center gap-1 border transition-all ${
+                      modalOrderStatus === 'echoue'
+                        ? 'bg-rose-500/20 border-rose-500 text-rose-300 ring-2 ring-rose-500/30'
+                        : 'bg-slate-950 border-slate-800 text-slate-400 hover:text-white'
+                    }`}
+                  >
+                    <XCircle className="w-4 h-4 text-rose-400" />
+                    <span>🔴 Échouée / Rejetée</span>
+                  </button>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-extrabold text-slate-300 mb-1">
+                  Code PIN attribué au client :
+                </label>
+                <input
+                  type="text"
+                  placeholder="Ex: FF-PIN-100-84920491 (Laissez vide pour auto-générer)"
+                  value={modalOrderPinCode}
+                  onChange={(e) => setModalOrderPinCode(e.target.value)}
+                  className="w-full px-3.5 py-2.5 rounded-xl bg-slate-950 border border-slate-700 text-white placeholder-slate-500 text-xs font-mono font-bold focus:outline-none focus:border-[#1E90FF]"
+                />
+                <p className="text-[10px] text-slate-400 mt-1">
+                  Si le statut est "Réussie" et le champ est vide, un code PIN du stock ou un code unique sera automatiquement attribué.
+                </p>
+              </div>
+            </div>
+
+            <div className="flex justify-end gap-2 pt-3 border-t border-slate-800">
+              <button
+                type="button"
+                onClick={() => setSelectedOrderModal(null)}
+                className="px-4 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-bold"
+              >
+                Annuler
+              </button>
+              <button
+                type="button"
+                onClick={handleSaveOrderModal}
+                disabled={isUpdatingOrder}
+                className="px-5 py-2.5 rounded-xl bg-[#1E90FF] hover:bg-blue-600 text-white text-xs font-extrabold shadow-md flex items-center gap-2"
+              >
+                {isUpdatingOrder ? (
+                  <>
+                    <RefreshCw className="w-3.5 h-3.5 animate-spin" /> Enregistrement...
+                  </>
+                ) : (
+                  <>
+                    <Save className="w-3.5 h-3.5" /> Enregistrer les modifications
+                  </>
+                )}
+              </button>
+            </div>
           </div>
         </div>
       )}

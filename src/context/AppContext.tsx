@@ -165,13 +165,20 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           localStorage.removeItem('frayzen_user');
         }
 
-        // Fetch deposits for user
-        const resDep = await fetch(`/api/wallet/deposits?email=${encodeURIComponent(user.email)}`);
-        if (resDep.ok) setDeposits(await resDep.json());
+        // Fetch deposits and orders (all for admin, user-specific for regular user)
+        if (user.isAdmin) {
+          const resDep = await fetch('/api/wallet/deposits');
+          if (resDep.ok) setDeposits(await resDep.json());
 
-        // Fetch user orders
-        const resOrd = await fetch(`/api/orders?email=${encodeURIComponent(user.email)}`);
-        if (resOrd.ok) setOrders(await resOrd.json());
+          const resOrd = await fetch('/api/orders');
+          if (resOrd.ok) setOrders(await resOrd.json());
+        } else {
+          const resDep = await fetch(`/api/wallet/deposits?email=${encodeURIComponent(user.email)}`);
+          if (resDep.ok) setDeposits(await resDep.json());
+
+          const resOrd = await fetch(`/api/orders?email=${encodeURIComponent(user.email)}`);
+          if (resOrd.ok) setOrders(await resOrd.json());
+        }
       } else {
         const resDep = await fetch('/api/wallet/deposits');
         if (resDep.ok) setDeposits(await resDep.json());
@@ -350,6 +357,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       if (!res.ok) {
         showToast(data.error || 'Erreur lors de la commande.', 'error');
         return { success: false };
+      }
+
+      if (data.user) {
+        setUser(prev => prev ? ({ ...prev, ...data.user }) : data.user);
+      } else if (data.remainingWalletBalance !== undefined && user) {
+        setUser(prev => prev ? ({ ...prev, walletBalanceHTG: data.remainingWalletBalance }) : null);
       }
 
       triggerConfetti();

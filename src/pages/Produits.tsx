@@ -9,7 +9,7 @@ export const Produits: React.FC = () => {
   const [showDetail, setShowDetail] = useState(false);
 
   // Main Free Fire Product Info for single card
-  const ffMainImage = 'https://images.unsplash.com/photo-1542751371-adc38448a05e?auto=format&fit=crop&w=800&q=80';
+  const ffMainImage = products.find(p => p.image)?.image || 'https://images.unsplash.com/photo-1542751371-adc38448a05e?auto=format&fit=crop&w=800&q=80';
 
   const handleSelectPack = (p: Product) => {
     setSelectedProduct(p);
@@ -155,6 +155,13 @@ export const Produits: React.FC = () => {
                   onClick={() => handleSelectPack(p)}
                   className="group p-4 rounded-2xl glass-card border border-white/10 hover:border-[#1E90FF] bg-slate-900/80 hover:bg-slate-900 flex flex-col justify-between space-y-3 cursor-pointer text-white transition-all shadow-md active:scale-95"
                 >
+                  {/* Photo du produit si disponible */}
+                  {p.image && (
+                    <div className="w-full h-20 sm:h-24 rounded-xl overflow-hidden bg-slate-950 border border-slate-800 shrink-0">
+                      <img src={p.image} alt={p.name} className="w-full h-full object-cover group-hover:scale-105 transition-transform" />
+                    </div>
+                  )}
+
                   {/* Ligne 1: Nom du pack */}
                   <div className="text-center pt-1">
                     <span className="font-extrabold text-white text-xs sm:text-sm block leading-snug">

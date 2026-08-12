@@ -710,11 +710,19 @@ app.post('/api/orders', async (req, res) => {
     if (paymentMethod === 'wallet') {
       if (user.walletBalanceHTG < product.priceHTG) {
         return res.status(400).json({
-          error: `Solde de portefeuille insuffisant (${user.walletBalanceHTG} HTG). Prix du produit: ${product.priceHTG} HTG. Veuillez recharger votre portefeuille via NATCASH.`
+          error: `Solde de portefeuille insuffisant (${user.walletBalanceHTG} HTG). Prix du produit: ${product.priceHTG} HTG. Veuillez recharger votre portefeuille.`
         });
       }
 
-      user.walletBalanceHTG -= product.priceHTG;
+      user.walletBalanceHTG = Math.max(0, user.walletBalanceHTG - product.priceHTG);
+
+      // Update in-memory users array
+      const uIdx = users.findIndex(u => u.email.toLowerCase().trim() === user.email.toLowerCase().trim());
+      if (uIdx !== -1) {
+        users[uIdx].walletBalanceHTG = user.walletBalanceHTG;
+      } else {
+        users.push(user);
+      }
 
       let pinDelivered: string | undefined = undefined;
       if (product.pinCodes && product.pinCodes.length > 0) {
@@ -752,7 +760,8 @@ app.post('/api/orders', async (req, res) => {
       return res.status(201).json({
         message: 'Achat réussi ! Votre code PIN a été attribué avec succès.',
         order: newOrder,
-        remainingWalletBalance: user.walletBalanceHTG
+        remainingWalletBalance: user.walletBalanceHTG,
+        user
       });
     }
 
@@ -763,7 +772,7 @@ app.post('/api/orders', async (req, res) => {
 
       const cleanedTxId = String(natcashTransactionId).replace(/\s+/g, '').trim();
 
-      const allOrders = await fetchOrdersFromSupabase();
+      const allOrders = await fetchOrdersFromSupabase(undefined, orders);
       const duplicateOrder = allOrders.find(o => o.natcashTransactionId === cleanedTxId);
       if (duplicateOrder) {
         return res.status(400).json({ error: `Ce code de transaction (${cleanedTxId}) a déjà été utilisé.` });
@@ -805,7 +814,7 @@ app.post('/api/orders', async (req, res) => {
 app.get('/api/orders', async (req, res) => {
   try {
     const { email } = req.query;
-    const ords = await fetchOrdersFromSupabase(email ? String(email) : undefined);
+    const ords = await fetchOrdersFromSupabase(email ? String(email) : undefined, orders);
     res.json(ords);
   } catch (err: any) {
     console.error('Error in GET /api/orders:', err);
@@ -818,7 +827,7 @@ app.put('/api/orders/:id', async (req, res) => {
     const { id } = req.params;
     const { status, pinCode } = req.body || {};
 
-    const allOrders = await fetchOrdersFromSupabase();
+    const allOrders = await fetchOrdersFromSupabase(undefined, orders);
     const order = allOrders.find(o => o.id === id);
     if (!order) {
       return res.status(404).json({ error: 'Commande non trouvée.' });
@@ -842,6 +851,13 @@ app.put('/api/orders/:id', async (req, res) => {
         pinDelivered = `FF-PIN-${product?.diamonds || 100}-${randDigits}${timeStamp}`;
       }
       order.pinCodeDelivered = pinDelivered;
+    }
+
+    const memIdx = orders.findIndex(o => o.id === id);
+    if (memIdx !== -1) {
+      orders[memIdx] = { ...order };
+    } else {
+      orders.unshift(order);
     }
 
     saveDataStore();

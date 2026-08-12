@@ -323,7 +323,19 @@ export const fetchDepositsFromSupabase = async (email?: string, fallbackDeposits
   return Array.from(depsMap.values()).sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
 };
 
-export const fetchOrdersFromSupabase = async (email?: string): Promise<Order[]> => {
+export const fetchOrdersFromSupabase = async (email?: string, fallbackOrders: Order[] = []): Promise<Order[]> => {
+  const ordersMap = new Map<string, Order>();
+
+  if (Array.isArray(fallbackOrders)) {
+    for (const o of fallbackOrders) {
+      if (o && o.id) {
+        if (!email || o.userEmail.toLowerCase().trim() === email.toLowerCase().trim()) {
+          ordersMap.set(o.id, o);
+        }
+      }
+    }
+  }
+
   if (supabaseAdmin) {
     try {
       let query = supabaseAdmin.from('orders').select('*').order('created_at', { ascending: false });
@@ -332,27 +344,31 @@ export const fetchOrdersFromSupabase = async (email?: string): Promise<Order[]> 
       }
       const { data, error } = await query;
       if (data && !error) {
-        return data.map((o: any) => ({
-          id: o.id,
-          userId: o.user_id || o.userId,
-          userEmail: o.user_email || o.userEmail,
-          userName: o.user_name || o.userName,
-          productId: o.product_id || o.productId,
-          productName: o.product_name || o.productName,
-          priceHTG: Number(o.price_htg ?? o.priceHTG ?? o.price ?? 0),
-          gamePlayerId: o.game_player_id || o.gamePlayerId,
-          paymentMethod: o.payment_method || o.paymentMethod,
-          natcashTransactionId: o.natcash_transaction_id || o.natcashTransactionId,
-          pinCodeDelivered: o.pin_code_delivered || o.pinCodeDelivered,
-          status: o.status,
-          createdAt: o.created_at || o.createdAt
-        }));
+        for (const o of data) {
+          const ordObj: Order = {
+            id: o.id,
+            userId: o.user_id || o.userId,
+            userEmail: o.user_email || o.userEmail,
+            userName: o.user_name || o.userName,
+            productId: o.product_id || o.productId,
+            productName: o.product_name || o.productName,
+            priceHTG: Number(o.price_htg ?? o.priceHTG ?? o.price ?? 0),
+            gamePlayerId: o.game_player_id || o.gamePlayerId,
+            paymentMethod: o.payment_method || o.paymentMethod,
+            natcashTransactionId: o.natcash_transaction_id || o.natcashTransactionId,
+            pinCodeDelivered: o.pin_code_delivered || o.pinCodeDelivered,
+            status: o.status,
+            createdAt: o.created_at || o.createdAt
+          };
+          ordersMap.set(ordObj.id, ordObj);
+        }
       }
     } catch (err) {
       handleSupabaseError('Erreur lecture orders', err);
     }
   }
-  return [];
+
+  return Array.from(ordersMap.values()).sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
 };
 
 export const fetchUsersFromSupabase = async (fallbackUsers: UserProfile[] = []): Promise<UserProfile[]> => {
