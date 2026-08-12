@@ -1,6 +1,6 @@
 import React from 'react';
 import { useApp } from '../context/AppContext';
-import { Wallet as WalletIcon, ShieldCheck, Clock, CheckCircle2, XCircle, Plus, ArrowUpRight, Copy, Check } from 'lucide-react';
+import { Wallet as WalletIcon, ShieldCheck, Clock, CheckCircle2, XCircle, AlertCircle, Plus, ArrowUpRight, Copy, Check } from 'lucide-react';
 import { ScrollReveal } from '../components/ScrollReveal';
 
 export const Wallet: React.FC = () => {
@@ -121,13 +121,25 @@ export const Wallet: React.FC = () => {
                       {dep.status === 'valide' && (
                         <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-emerald-500/20 text-emerald-400 font-bold border border-emerald-500/30">
                           <CheckCircle2 className="w-3.5 h-3.5" />
-                          Validé
+                          Validé / Crédité
                         </span>
                       )}
                       {dep.status === 'en_attente' && (
                         <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-amber-500/20 text-amber-300 font-bold border border-amber-500/30 animate-pulse">
                           <Clock className="w-3.5 h-3.5" />
                           En attente
+                        </span>
+                      )}
+                      {dep.status === 'manque_preuve' && (
+                        <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-purple-500/20 text-purple-300 font-bold border border-purple-500/30">
+                          <AlertCircle className="w-3.5 h-3.5" />
+                          Preuve manquante
+                        </span>
+                      )}
+                      {dep.status === 'id_manquant' && (
+                        <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-orange-500/20 text-orange-300 font-bold border border-orange-500/30">
+                          <AlertCircle className="w-3.5 h-3.5" />
+                          ID Transaction manquant
                         </span>
                       )}
                       {dep.status === 'rejete' && (

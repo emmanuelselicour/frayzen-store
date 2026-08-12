@@ -17,7 +17,7 @@ export interface Product {
   allowedPaymentMethods?: AllowedPaymentMethod[];
 }
 
-export type DepositStatus = 'en_attente' | 'valide' | 'rejete';
+export type DepositStatus = 'en_attente' | 'valide' | 'rejete' | 'manque_preuve' | 'id_manquant';
 
 export interface WalletDeposit {
   id: string;
@@ -26,7 +26,7 @@ export interface WalletDeposit {
   userName: string;
   userPhone: string;
   transactionId14: string; // 14-digit NATCASH transaction ID or MonCash Tx ID
-  paymentMethod?: 'natcash' | 'moncash';
+  paymentMethod?: 'natcash' | 'moncash' | 'admin_manual';
   amountHTG: number;
   status: DepositStatus;
   createdAt: string;

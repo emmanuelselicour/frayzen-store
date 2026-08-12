@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useApp } from '../context/AppContext';
-import { Product, WalletDeposit, ContactTicket, UserProfile, AdminStats, UserDetailedMetrics } from '../types';
-import { Shield, LayoutDashboard, ShoppingBag, Wallet, Settings, MessageSquare, Plus, Trash2, Edit3, CheckCircle2, XCircle, Save, Users, Award, RefreshCw, KeyRound, Lock, Eye, ArrowLeft, Flame, DollarSign, UserCheck, X, ShieldAlert, CreditCard } from 'lucide-react';
+import { Product, WalletDeposit, ContactTicket, UserProfile, AdminStats, UserDetailedMetrics, DepositStatus } from '../types';
+import { Shield, LayoutDashboard, ShoppingBag, Wallet, Settings, MessageSquare, Plus, Trash2, Edit3, CheckCircle2, XCircle, AlertCircle, Save, Users, Award, RefreshCw, KeyRound, Lock, Eye, ArrowLeft, Flame, DollarSign, UserCheck, X, ShieldAlert, CreditCard, Calendar, Clock, Search, Filter, FileText, Check, Copy } from 'lucide-react';
 import { ScrollReveal } from '../components/ScrollReveal';
 
 type AdminTab = 'stats' | 'produits' | 'wallet' | 'config' | 'users' | 'contact';
@@ -87,16 +87,47 @@ export const AdminDashboard: React.FC = () => {
   const [editingPinsProduct, setEditingPinsProduct] = useState<Product | null>(null);
   const [pinsTextarea, setPinsTextarea] = useState('');
 
+  // Wallet Deposit Filters & Modal State
+  const [depositFilter, setDepositFilter] = useState<'tous' | 'en_attente' | 'valide' | 'manque_preuve' | 'id_manquant' | 'rejete'>('tous');
+  const [depositSearch, setDepositSearch] = useState('');
+  const [selectedDepositForNote, setSelectedDepositForNote] = useState<WalletDeposit | null>(null);
+  const [modalDepositStatus, setModalDepositStatus] = useState<DepositStatus>('en_attente');
+  const [modalAdminNote, setModalAdminNote] = useState('');
+  const [zoomedImage, setZoomedImage] = useState<string | null>(null);
+  const [copiedTxId, setCopiedTxId] = useState<string | null>(null);
+
   // Wallet Adjustment Form State
   const [adjustEmail, setAdjustEmail] = useState('');
   const [adjustAmount, setAdjustAmount] = useState('500');
-  const [adjustType, setAdjustType] = useState<'add' | 'deduct'>('deduct');
+  const [adjustType, setAdjustType] = useState<'add' | 'deduct'>('add');
+  const [adjustNote, setAdjustNote] = useState('');
   const [showUserSuggestions, setShowUserSuggestions] = useState(false);
 
   // Config Action Confirmation PIN Modal State
   const [isConfigPinModalOpen, setIsConfigPinModalOpen] = useState(false);
   const [configPinInput, setConfigPinInput] = useState('');
   const [configPinError, setConfigPinError] = useState('');
+
+  const formatFullDateTime = (dateStr: string) => {
+    if (!dateStr) return 'N/A';
+    try {
+      const d = new Date(dateStr);
+      const dateFormatted = d.toLocaleDateString('fr-FR', {
+        weekday: 'long',
+        day: 'numeric',
+        month: 'long',
+        year: 'numeric'
+      });
+      const timeFormatted = d.toLocaleTimeString('fr-FR', {
+        hour: '2-digit',
+        minute: '2-digit'
+      });
+      const capitalized = dateFormatted.charAt(0).toUpperCase() + dateFormatted.slice(1);
+      return `${capitalized} à ${timeFormatted}`;
+    } catch {
+      return dateStr;
+    }
+  };
 
   useEffect(() => {
     fetchUsersDetailed();
@@ -363,17 +394,22 @@ export const AdminDashboard: React.FC = () => {
   };
 
   // Update Deposit Status
-  const handleUpdateDepositStatus = async (id: string, status: 'valide' | 'rejete' | 'en_attente') => {
+  const handleUpdateDepositStatus = async (id: string, status: DepositStatus, adminNote?: string) => {
     try {
       const res = await fetch(`/api/wallet/deposits/${id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ status })
+        body: JSON.stringify({ status, adminNote })
       });
       if (res.ok) {
-        showToast(`Statut mis à jour en '${status}'`, 'success');
+        showToast(`Statut du dépôt mis à jour (${status})`, 'success');
         await refreshData();
         await fetchUsersDetailed();
+        setSelectedDepositForNote(null);
+        setModalAdminNote('');
+      } else {
+        const errData = await res.json();
+        showToast(errData.error || 'Erreur lors de la mise à jour.', 'error');
       }
     } catch {
       showToast('Erreur de mise à jour.', 'error');
@@ -422,7 +458,8 @@ export const AdminDashboard: React.FC = () => {
         body: JSON.stringify({
           userEmail: adjustEmail,
           amountHTG: Number(adjustAmount),
-          type: adjustType
+          type: adjustType,
+          adminNote: adjustNote
         })
       });
 
@@ -436,6 +473,7 @@ export const AdminDashboard: React.FC = () => {
       await refreshData();
       await fetchUsersDetailed();
       setAdjustEmail('');
+      setAdjustNote('');
     } catch {
       showToast('Erreur réseau.', 'error');
     }
@@ -1239,71 +1277,349 @@ export const AdminDashboard: React.FC = () => {
             </div>
           )}
 
-          {/* TAB 3: GESTION DE WALLET */}
+          {/* TAB 3: GESTION DE WALLET ET HISTORIQUE DES TRANSACTIONS */}
           {activeAdminTab === 'wallet' && (
             <div className="space-y-8">
               
               <div className="space-y-4">
-                <h2 className="text-xl font-black text-white pb-3 border-b border-white/10">Demandes de Dépôts NATCASH & MonCash</h2>
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-white/10">
+                  <div>
+                    <h2 className="text-xl font-black text-white flex items-center gap-2">
+                      <Wallet className="w-6 h-6 text-[#1E90FF]" />
+                      Historique & Gestion des Dépôts
+                    </h2>
+                    <p className="text-xs text-slate-400 mt-0.5">
+                      Validez les recharges, vérifiez les preuves et modifiez les statuts avec explications pour le client.
+                    </p>
+                  </div>
 
+                  {/* Search Bar */}
+                  <div className="relative w-full sm:w-72">
+                    <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                    <input
+                      type="text"
+                      placeholder="Filtrer par nom, email, ID..."
+                      value={depositSearch}
+                      onChange={e => setDepositSearch(e.target.value)}
+                      className="w-full pl-9 pr-3 py-2 rounded-xl glass-input text-xs text-white placeholder-slate-400 border border-slate-700 focus:border-[#1E90FF]"
+                    />
+                  </div>
+                </div>
+
+                {/* Filter Tabs */}
+                <div className="flex flex-wrap items-center gap-2 pt-1">
+                  <button
+                    onClick={() => setDepositFilter('tous')}
+                    className={`px-3 py-1.5 rounded-xl font-bold text-xs transition-all flex items-center gap-1.5 ${
+                      depositFilter === 'tous'
+                        ? 'bg-[#1E90FF] text-white shadow-md'
+                        : 'bg-slate-800/80 text-slate-400 hover:text-white hover:bg-slate-800'
+                    }`}
+                  >
+                    Tous
+                    <span className="px-1.5 py-0.5 rounded-md bg-white/20 text-[10px] font-black">{deposits.length}</span>
+                  </button>
+
+                  <button
+                    onClick={() => setDepositFilter('en_attente')}
+                    className={`px-3 py-1.5 rounded-xl font-bold text-xs transition-all flex items-center gap-1.5 ${
+                      depositFilter === 'en_attente'
+                        ? 'bg-amber-500 text-slate-950 font-extrabold shadow-md'
+                        : 'bg-amber-500/10 text-amber-300 border border-amber-500/30 hover:bg-amber-500/20'
+                    }`}
+                  >
+                    <Clock className="w-3.5 h-3.5" />
+                    En attente
+                    <span className="px-1.5 py-0.5 rounded-md bg-amber-500/30 text-[10px] font-black">
+                      {deposits.filter(d => d.status === 'en_attente').length}
+                    </span>
+                  </button>
+
+                  <button
+                    onClick={() => setDepositFilter('valide')}
+                    className={`px-3 py-1.5 rounded-xl font-bold text-xs transition-all flex items-center gap-1.5 ${
+                      depositFilter === 'valide'
+                        ? 'bg-emerald-600 text-white shadow-md'
+                        : 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 hover:bg-emerald-500/20'
+                    }`}
+                  >
+                    <CheckCircle2 className="w-3.5 h-3.5" />
+                    Validé / Terminé
+                    <span className="px-1.5 py-0.5 rounded-md bg-emerald-500/30 text-[10px] font-black">
+                      {deposits.filter(d => d.status === 'valide').length}
+                    </span>
+                  </button>
+
+                  <button
+                    onClick={() => setDepositFilter('manque_preuve')}
+                    className={`px-3 py-1.5 rounded-xl font-bold text-xs transition-all flex items-center gap-1.5 ${
+                      depositFilter === 'manque_preuve'
+                        ? 'bg-purple-600 text-white shadow-md'
+                        : 'bg-purple-500/10 text-purple-300 border border-purple-500/30 hover:bg-purple-500/20'
+                    }`}
+                  >
+                    <AlertCircle className="w-3.5 h-3.5" />
+                    Preuve manquante
+                    <span className="px-1.5 py-0.5 rounded-md bg-purple-500/30 text-[10px] font-black">
+                      {deposits.filter(d => d.status === 'manque_preuve').length}
+                    </span>
+                  </button>
+
+                  <button
+                    onClick={() => setDepositFilter('id_manquant')}
+                    className={`px-3 py-1.5 rounded-xl font-bold text-xs transition-all flex items-center gap-1.5 ${
+                      depositFilter === 'id_manquant'
+                        ? 'bg-orange-600 text-white shadow-md'
+                        : 'bg-orange-500/10 text-orange-300 border border-orange-500/30 hover:bg-orange-500/20'
+                    }`}
+                  >
+                    <AlertCircle className="w-3.5 h-3.5" />
+                    ID manquant
+                    <span className="px-1.5 py-0.5 rounded-md bg-orange-500/30 text-[10px] font-black">
+                      {deposits.filter(d => d.status === 'id_manquant').length}
+                    </span>
+                  </button>
+
+                  <button
+                    onClick={() => setDepositFilter('rejete')}
+                    className={`px-3 py-1.5 rounded-xl font-bold text-xs transition-all flex items-center gap-1.5 ${
+                      depositFilter === 'rejete'
+                        ? 'bg-red-600 text-white shadow-md'
+                        : 'bg-red-500/10 text-red-400 border border-red-500/30 hover:bg-red-500/20'
+                    }`}
+                  >
+                    <XCircle className="w-3.5 h-3.5" />
+                    Rejeté
+                    <span className="px-1.5 py-0.5 rounded-md bg-red-500/30 text-[10px] font-black">
+                      {deposits.filter(d => d.status === 'rejete').length}
+                    </span>
+                  </button>
+                </div>
+
+                {/* Deposits List */}
                 {deposits.length === 0 ? (
-                  <p className="text-xs text-slate-400">Aucune demande de dépôt en attente.</p>
+                  <p className="text-xs text-slate-400 py-6 text-center">Aucune demande de dépôt enregistrée.</p>
+                ) : deposits.filter(dep => {
+                  const matchesFilter =
+                    depositFilter === 'tous' ? true :
+                    depositFilter === 'en_attente' ? dep.status === 'en_attente' :
+                    depositFilter === 'valide' ? dep.status === 'valide' :
+                    depositFilter === 'manque_preuve' ? dep.status === 'manque_preuve' :
+                    depositFilter === 'id_manquant' ? dep.status === 'id_manquant' :
+                    depositFilter === 'rejete' ? dep.status === 'rejete' : true;
+
+                  if (!matchesFilter) return false;
+                  if (!depositSearch.trim()) return true;
+
+                  const q = depositSearch.toLowerCase().trim();
+                  return (
+                    (dep.userName && dep.userName.toLowerCase().includes(q)) ||
+                    (dep.userEmail && dep.userEmail.toLowerCase().includes(q)) ||
+                    (dep.userPhone && dep.userPhone.toLowerCase().includes(q)) ||
+                    (dep.transactionId14 && dep.transactionId14.toLowerCase().includes(q))
+                  );
+                }).length === 0 ? (
+                  <div className="p-8 rounded-2xl bg-slate-900/60 border border-slate-800 text-center space-y-2">
+                    <p className="text-xs text-slate-400">Aucun dépôt ne correspond à ce filtre ou recherche.</p>
+                    <button
+                      onClick={() => { setDepositFilter('tous'); setDepositSearch(''); }}
+                      className="px-3 py-1 rounded-xl bg-slate-800 text-[#1E90FF] text-xs font-bold"
+                    >
+                      Réinitialiser les filtres
+                    </button>
+                  </div>
                 ) : (
                   <div className="space-y-3">
-                    {deposits.map(dep => (
-                      <div key={dep.id} className="p-4 rounded-2xl bg-slate-900/80 border border-slate-800 space-y-3 text-xs shadow-sm text-white">
-                        <div className="flex items-center justify-between">
+                    {deposits.filter(dep => {
+                      const matchesFilter =
+                        depositFilter === 'tous' ? true :
+                        depositFilter === 'en_attente' ? dep.status === 'en_attente' :
+                        depositFilter === 'valide' ? dep.status === 'valide' :
+                        depositFilter === 'manque_preuve' ? dep.status === 'manque_preuve' :
+                        depositFilter === 'id_manquant' ? dep.status === 'id_manquant' :
+                        depositFilter === 'rejete' ? dep.status === 'rejete' : true;
+
+                      if (!matchesFilter) return false;
+                      if (!depositSearch.trim()) return true;
+
+                      const q = depositSearch.toLowerCase().trim();
+                      return (
+                        (dep.userName && dep.userName.toLowerCase().includes(q)) ||
+                        (dep.userEmail && dep.userEmail.toLowerCase().includes(q)) ||
+                        (dep.userPhone && dep.userPhone.toLowerCase().includes(q)) ||
+                        (dep.transactionId14 && dep.transactionId14.toLowerCase().includes(q))
+                      );
+                    }).map(dep => (
+                      <div key={dep.id} className="p-4 rounded-2xl bg-slate-900/90 border border-slate-800 space-y-3 text-xs shadow-md text-white hover:border-slate-700 transition-all">
+                        
+                        {/* Header: User Info & Amount */}
+                        <div className="flex flex-wrap items-center justify-between gap-2 pb-2 border-b border-slate-800">
                           <div>
-                            <span className="font-extrabold text-white text-sm">{dep.userName}</span>
-                            <span className="text-slate-400 text-[10px] ml-2">({dep.userEmail})</span>
+                            <div className="flex items-center gap-2">
+                              <span className="font-extrabold text-white text-sm">{dep.userName}</span>
+                              <span className="px-2 py-0.5 rounded-md bg-blue-500/10 text-[#1E90FF] text-[10px] font-bold border border-blue-500/20">
+                                {dep.paymentMethod === 'natcash' ? 'NATCASH' : dep.paymentMethod === 'moncash' ? 'MonCash' : 'Recharge Admin'}
+                              </span>
+                            </div>
+                            <div className="text-slate-400 text-[11px] flex flex-wrap items-center gap-3 mt-0.5">
+                              <span>📧 {dep.userEmail}</span>
+                              <span>📞 {dep.userPhone}</span>
+                            </div>
                           </div>
-                          <span className="font-black text-lg text-[#1E90FF]">+{dep.amountHTG} HTG</span>
+
+                          <div className="text-right">
+                            <span className={`font-black text-lg ${dep.amountHTG >= 0 ? 'text-[#1E90FF]' : 'text-red-400'}`}>
+                              {dep.amountHTG >= 0 ? `+${dep.amountHTG.toLocaleString('fr-FR')}` : dep.amountHTG.toLocaleString('fr-FR')} HTG
+                            </span>
+                          </div>
                         </div>
 
-                        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 p-2.5 rounded-xl bg-slate-950 font-mono">
-                          <span className="text-[#FF6321] font-bold">ID Transaction: {dep.transactionId14}</span>
-                          <span className="text-[10px] text-slate-400">{dep.createdAt ? new Date(dep.createdAt).toLocaleString('fr-FR') : ''}</span>
+                        {/* Transaction ID & Detailed Date/Time/Day */}
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 p-2.5 rounded-xl bg-slate-950 font-mono">
+                          <div className="flex items-center gap-2">
+                            <span className="text-[#FF6321] font-bold">ID Transaction: {dep.transactionId14}</span>
+                            <button
+                              onClick={() => {
+                                navigator.clipboard.writeText(dep.transactionId14);
+                                setCopiedTxId(dep.transactionId14);
+                                setTimeout(() => setCopiedTxId(null), 2000);
+                              }}
+                              className="p-1 rounded bg-slate-800 text-slate-300 hover:text-white"
+                              title="Copier ID"
+                            >
+                              {copiedTxId === dep.transactionId14 ? <Check className="w-3 h-3 text-emerald-400" /> : <Copy className="w-3 h-3" />}
+                            </button>
+                          </div>
+
+                          <div className="flex items-center gap-1.5 text-slate-400 text-[11px] sm:justify-end">
+                            <Calendar className="w-3.5 h-3.5 text-[#1E90FF]" />
+                            <span>{formatFullDateTime(dep.createdAt)}</span>
+                          </div>
                         </div>
 
+                        {/* Screenshot Attachment */}
                         {dep.screenshotUrl && (
-                          <div>
-                            <span className="text-[10px] text-slate-400 font-bold block mb-1">Capture d'écran jointe :</span>
-                            <img src={dep.screenshotUrl} alt="Screenshot" className="max-h-40 rounded-xl border border-slate-700" />
+                          <div className="p-2.5 rounded-xl bg-slate-950/60 border border-slate-800 space-y-1.5">
+                            <div className="flex items-center justify-between text-[11px]">
+                              <span className="text-slate-300 font-bold flex items-center gap-1">
+                                <FileText className="w-3.5 h-3.5 text-amber-400" />
+                                Preuve de paiement jointe :
+                              </span>
+                              <button
+                                onClick={() => setZoomedImage(dep.screenshotUrl!)}
+                                className="text-[#1E90FF] hover:underline font-bold flex items-center gap-1"
+                              >
+                                <Eye className="w-3 h-3" /> Agrandir
+                              </button>
+                            </div>
+                            <img
+                              src={dep.screenshotUrl}
+                              alt="Preuve de dépôt"
+                              onClick={() => setZoomedImage(dep.screenshotUrl!)}
+                              className="max-h-36 rounded-xl border border-slate-700 cursor-pointer hover:opacity-90 transition-opacity"
+                            />
                           </div>
                         )}
 
-                        <div className="flex items-center justify-between pt-2">
-                          <span className="text-[10px] text-slate-400">Statut actuel: <strong className="text-white">{dep.status}</strong></span>
-                          <div className="flex gap-2">
+                        {/* Current Status & Admin Note */}
+                        <div className="flex flex-wrap items-center justify-between gap-2 pt-1">
+                          <div className="flex items-center gap-2">
+                            <span className="text-slate-400 text-[11px] font-bold">Statut :</span>
+                            {dep.status === 'valide' && (
+                              <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-emerald-500/20 text-emerald-400 font-bold border border-emerald-500/30">
+                                <CheckCircle2 className="w-3.5 h-3.5" /> Validé / Crédité
+                              </span>
+                            )}
+                            {dep.status === 'en_attente' && (
+                              <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-amber-500/20 text-amber-300 font-bold border border-amber-500/30 animate-pulse">
+                                <Clock className="w-3.5 h-3.5" /> En attente
+                              </span>
+                            )}
+                            {dep.status === 'manque_preuve' && (
+                              <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-purple-500/20 text-purple-300 font-bold border border-purple-500/30">
+                                <AlertCircle className="w-3.5 h-3.5" /> Preuve manquante
+                              </span>
+                            )}
+                            {dep.status === 'id_manquant' && (
+                              <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-orange-500/20 text-orange-300 font-bold border border-orange-500/30">
+                                <AlertCircle className="w-3.5 h-3.5" /> ID manquant
+                              </span>
+                            )}
+                            {dep.status === 'rejete' && (
+                              <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-red-500/20 text-red-400 font-bold border border-red-500/30">
+                                <XCircle className="w-3.5 h-3.5" /> Rejeté
+                              </span>
+                            )}
+                          </div>
+
+                          {/* Quick Actions Dropdown / Buttons */}
+                          <div className="flex flex-wrap gap-1.5">
                             <button
                               onClick={() => handleUpdateDepositStatus(dep.id, 'valide')}
-                              className="px-3 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs flex items-center gap-1 shadow-sm"
+                              className="px-2.5 py-1 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-[11px] flex items-center gap-1 shadow-sm"
+                              title="Valider et créditer le compte du client"
                             >
-                              <CheckCircle2 className="w-3.5 h-3.5" /> Valider (+Solde)
+                              <CheckCircle2 className="w-3 h-3" /> Valider (+Solde)
+                            </button>
+
+                            <button
+                              onClick={() => handleUpdateDepositStatus(dep.id, 'manque_preuve', 'Preuve de paiement manquante. Veuillez soumettre une capture lisible.')}
+                              className="px-2.5 py-1 rounded-xl bg-purple-600/80 hover:bg-purple-600 text-white font-bold text-[11px] flex items-center gap-1 shadow-sm"
+                              title="Marquer comme manque de preuve"
+                            >
+                              <AlertCircle className="w-3 h-3" /> Preuve Manquante
+                            </button>
+
+                            <button
+                              onClick={() => handleUpdateDepositStatus(dep.id, 'id_manquant', 'Numéro de transaction manquant ou invalide. Veuillez vérifier votre reçu.')}
+                              className="px-2.5 py-1 rounded-xl bg-orange-600/80 hover:bg-orange-600 text-white font-bold text-[11px] flex items-center gap-1 shadow-sm"
+                              title="Marquer comme ID transaction manquant"
+                            >
+                              <AlertCircle className="w-3 h-3" /> ID Manquant
                             </button>
 
                             <button
                               onClick={() => handleUpdateDepositStatus(dep.id, 'rejete')}
-                              className="px-3 py-1.5 rounded-xl bg-red-600 hover:bg-red-700 text-white font-bold text-xs flex items-center gap-1 shadow-sm"
+                              className="px-2.5 py-1 rounded-xl bg-red-600/80 hover:bg-red-600 text-white font-bold text-[11px] flex items-center gap-1 shadow-sm"
+                              title="Rejeter la demande"
                             >
-                              <XCircle className="w-3.5 h-3.5" /> Rejeter
+                              <XCircle className="w-3 h-3" /> Rejeter
+                            </button>
+
+                            <button
+                              onClick={() => {
+                                setSelectedDepositForNote(dep);
+                                setModalDepositStatus(dep.status);
+                                setModalAdminNote(dep.adminNote || '');
+                              }}
+                              className="px-2.5 py-1 rounded-xl bg-slate-800 hover:bg-slate-700 text-[#1E90FF] border border-blue-500/30 font-bold text-[11px] flex items-center gap-1"
+                              title="Ajouter une note ou changer le statut manuellement"
+                            >
+                              <Edit3 className="w-3 h-3" /> Note/Statut...
                             </button>
                           </div>
                         </div>
+
+                        {dep.adminNote && (
+                          <div className="p-2 rounded-xl bg-slate-950/80 border border-slate-800 text-[11px] text-slate-300 italic">
+                            💬 <strong>Note Admin :</strong> {dep.adminNote}
+                          </div>
+                        )}
+
                       </div>
                     ))}
                   </div>
                 )}
               </div>
 
-              {/* Admin Manual Wallet Correction */}
+              {/* Admin Manual Wallet Adjustment Form */}
               <div className="p-6 rounded-2xl bg-red-950/40 border border-red-900/80 space-y-4 shadow-sm text-white">
                 <h3 className="text-base font-extrabold text-red-400 flex items-center gap-2">
                   <Shield className="w-5 h-5 text-red-400" />
-                  Ajustement Manuel de Wallet (Alerte Erreur)
+                  Ajustement Manuel Direct de Wallet
                 </h3>
                 <p className="text-xs text-slate-300">
-                  Administrateur ka ajoute oswa <strong>retire lajan nan wallet yon user</strong> si gen erè ou bien réclamation. Tape nom ou email pou jwenn suggestion rapidd.
+                  Administrateur ka ajoute oswa <strong>retire lajan nan wallet yon user</strong> si gen erè ou bien réclamation. Yon rantre ap kreye nan istorik la otomatikman.
                 </p>
 
                 <form onSubmit={handleAdjustWallet} className="space-y-3">
@@ -1371,17 +1687,27 @@ export const AdminDashboard: React.FC = () => {
                     <select
                       value={adjustType}
                       onChange={e => setAdjustType(e.target.value as any)}
-                      className="px-3 py-2.5 rounded-xl glass-input text-xs text-white bg-slate-900 border-slate-700"
+                      className="px-3 py-2.5 rounded-xl glass-input text-xs text-white bg-slate-900 border-slate-700 font-bold"
                     >
-                      <option value="deduct" className="bg-slate-900 text-white">Retirer / Déduire (-)</option>
-                      <option value="add" className="bg-slate-900 text-white">Ajouter (+)</option>
+                      <option value="add" className="bg-slate-900 text-emerald-400">Ajouter (+Solde)</option>
+                      <option value="deduct" className="bg-slate-900 text-red-400">Retirer / Déduire (-Solde)</option>
                     </select>
 
+                    <input
+                      type="text"
+                      placeholder="Raison / Note optionnelle..."
+                      value={adjustNote}
+                      onChange={e => setAdjustNote(e.target.value)}
+                      className="px-3 py-2.5 rounded-xl glass-input text-xs text-white placeholder-slate-400 border border-slate-700"
+                    />
+                  </div>
+
+                  <div className="flex justify-end">
                     <button
                       type="submit"
-                      className="py-2.5 px-4 rounded-xl bg-red-600 hover:bg-red-500 text-white font-extrabold text-xs shadow-md"
+                      className="py-2.5 px-5 rounded-xl bg-red-600 hover:bg-red-500 text-white font-extrabold text-xs shadow-md flex items-center gap-2"
                     >
-                      Appliquer l'Ajustement
+                      <Shield className="w-4 h-4" /> Appliquer l'Ajustement
                     </button>
                   </div>
                 </form>
@@ -1939,6 +2265,86 @@ export const AdminDashboard: React.FC = () => {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Selected Deposit Custom Status / Note Modal */}
+      {selectedDepositForNote && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-fade-in">
+          <div className="w-full max-w-md p-6 rounded-3xl bg-slate-900 border border-slate-700 shadow-2xl space-y-4 text-white">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-800">
+              <h3 className="font-extrabold text-base text-white flex items-center gap-2">
+                <Edit3 className="w-5 h-5 text-[#1E90FF]" />
+                Mettre à jour le Statut du Dépôt
+              </h3>
+              <button onClick={() => setSelectedDepositForNote(null)} className="p-1.5 rounded-xl bg-slate-800 text-slate-400 hover:text-white">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="space-y-3 text-xs">
+              <div className="p-3 rounded-2xl bg-slate-950 border border-slate-800 space-y-1">
+                <p><strong className="text-slate-400">Client :</strong> {selectedDepositForNote.userName} ({selectedDepositForNote.userEmail})</p>
+                <p><strong className="text-slate-400">Montant :</strong> <span className="text-[#1E90FF] font-black">{selectedDepositForNote.amountHTG} HTG</span></p>
+                <p><strong className="text-slate-400">Transaction ID :</strong> <span className="font-mono text-[#FF6321]">{selectedDepositForNote.transactionId14}</span></p>
+              </div>
+
+              <div>
+                <label className="block text-[11px] font-bold text-slate-300 mb-1">Choisir le Statut :</label>
+                <select
+                  value={modalDepositStatus}
+                  onChange={e => setModalDepositStatus(e.target.value as DepositStatus)}
+                  className="w-full px-3 py-2.5 rounded-xl bg-slate-950 border border-slate-700 text-white font-bold"
+                >
+                  <option value="valide">🟢 Validé / Crédité (+Solde)</option>
+                  <option value="en_attente">🟡 En attente de traitement</option>
+                  <option value="manque_preuve">🟣 Preuve de paiement manquante</option>
+                  <option value="id_manquant">🟠 ID de transaction manquant</option>
+                  <option value="rejete">🔴 Rejeté</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-[11px] font-bold text-slate-300 mb-1">Message / Raison explicative pour le client :</label>
+                <textarea
+                  rows={3}
+                  placeholder="Ex: Preuve de paiement illisible, s'il vous plaît envoyez une capture nette avec le reçu complet."
+                  value={modalAdminNote}
+                  onChange={e => setModalAdminNote(e.target.value)}
+                  className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-700 text-white placeholder-slate-500 text-xs"
+                />
+              </div>
+            </div>
+
+            <div className="flex justify-end gap-2 pt-2 border-t border-slate-800">
+              <button
+                type="button"
+                onClick={() => setSelectedDepositForNote(null)}
+                className="px-4 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-bold"
+              >
+                Annuler
+              </button>
+              <button
+                type="button"
+                onClick={() => handleUpdateDepositStatus(selectedDepositForNote.id, modalDepositStatus, modalAdminNote)}
+                className="px-4 py-2.5 rounded-xl bg-[#1E90FF] hover:bg-blue-600 text-white text-xs font-extrabold shadow-md"
+              >
+                Appliquer & Enregistrer
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Full-Screen Zoom Screenshot Modal */}
+      {zoomedImage && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/90 backdrop-blur-md animate-fade-in" onClick={() => setZoomedImage(null)}>
+          <div className="relative max-w-3xl max-h-[90vh] p-2" onClick={e => e.stopPropagation()}>
+            <button onClick={() => setZoomedImage(null)} className="absolute top-4 right-4 p-2 rounded-full bg-slate-900/90 text-white hover:bg-slate-800 border border-slate-700">
+              <X className="w-6 h-6" />
+            </button>
+            <img src={zoomedImage} alt="Preuve de paiement" className="max-w-full max-h-[85vh] rounded-2xl border border-slate-700 shadow-2xl object-contain" />
           </div>
         </div>
       )}

@@ -276,7 +276,19 @@ export const fetchNatcashConfigFromSupabase = async (): Promise<NatcashConfig> =
   return INITIAL_NATCASH_CONFIG;
 };
 
-export const fetchDepositsFromSupabase = async (email?: string): Promise<WalletDeposit[]> => {
+export const fetchDepositsFromSupabase = async (email?: string, fallbackDeposits: WalletDeposit[] = []): Promise<WalletDeposit[]> => {
+  const depsMap = new Map<string, WalletDeposit>();
+
+  if (Array.isArray(fallbackDeposits)) {
+    for (const d of fallbackDeposits) {
+      if (d && d.id) {
+        if (!email || d.userEmail?.toLowerCase().trim() === email.toLowerCase().trim()) {
+          depsMap.set(d.id, d);
+        }
+      }
+    }
+  }
+
   if (supabaseAdmin) {
     try {
       let query = supabaseAdmin.from('wallet_deposits').select('*').order('created_at', { ascending: false });
@@ -285,26 +297,30 @@ export const fetchDepositsFromSupabase = async (email?: string): Promise<WalletD
       }
       const { data, error } = await query;
       if (data && !error) {
-        return data.map((d: any) => ({
-          id: d.id,
-          userId: d.user_id || d.userId,
-          userEmail: d.user_email || d.userEmail,
-          userName: d.user_name || d.userName,
-          userPhone: d.user_phone || d.userPhone,
-          transactionId14: d.transaction_id_14 || d.transactionId14,
-          paymentMethod: d.payment_method || d.paymentMethod || 'natcash',
-          amountHTG: Number(d.amount_htg ?? d.amountHTG),
-          status: d.status,
-          createdAt: d.created_at || d.createdAt,
-          adminNote: d.admin_note || d.adminNote,
-          screenshotUrl: d.screenshot_url || d.screenshotUrl
-        }));
+        for (const d of data) {
+          const item: WalletDeposit = {
+            id: d.id,
+            userId: d.user_id || d.userId,
+            userEmail: d.user_email || d.userEmail,
+            userName: d.user_name || d.userName,
+            userPhone: d.user_phone || d.userPhone,
+            transactionId14: d.transaction_id_14 || d.transactionId14,
+            paymentMethod: d.payment_method || d.paymentMethod || 'natcash',
+            amountHTG: Number(d.amount_htg ?? d.amountHTG),
+            status: d.status,
+            createdAt: d.created_at || d.createdAt,
+            adminNote: d.admin_note || d.adminNote,
+            screenshotUrl: d.screenshot_url || d.screenshotUrl
+          };
+          depsMap.set(item.id, item);
+        }
       }
     } catch (err) {
       handleSupabaseError('Erreur lecture wallet_deposits', err);
     }
   }
-  return [];
+
+  return Array.from(depsMap.values()).sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
 };
 
 export const fetchOrdersFromSupabase = async (email?: string): Promise<Order[]> => {

@@ -2,7 +2,7 @@ import express from 'express';
 import path from 'path';
 import fs from 'fs';
 import { INITIAL_PRODUCTS, INITIAL_NATCASH_CONFIG, INITIAL_DEPOSITS, INITIAL_ORDERS, INITIAL_TICKETS } from './src/data/initialData';
-import { Product, ProductCategory, NatcashConfig, WalletDeposit, Order, ContactTicket, UserProfile, AdminStats } from './src/types';
+import { Product, ProductCategory, NatcashConfig, WalletDeposit, DepositStatus, Order, ContactTicket, UserProfile, AdminStats } from './src/types';
 import {
   fetchProductsFromSupabase,
   fetchNatcashConfigFromSupabase,
@@ -554,7 +554,7 @@ app.post('/api/wallet/deposit', async (req, res) => {
 app.get('/api/wallet/deposits', async (req, res) => {
   try {
     const { email } = req.query;
-    const deps = await fetchDepositsFromSupabase(email ? String(email) : undefined);
+    const deps = await fetchDepositsFromSupabase(email ? String(email) : undefined, walletDeposits);
     res.json(deps);
   } catch (err: any) {
     console.error('Error in GET /api/wallet/deposits:', err);
@@ -567,33 +567,56 @@ app.put('/api/wallet/deposits/:id', async (req, res) => {
     const { id } = req.params;
     const { status, adminNote } = req.body || {};
 
-    const allDeposits = await fetchDepositsFromSupabase();
-    const deposit = allDeposits.find(d => d.id === id);
+    const allDeposits = await fetchDepositsFromSupabase(undefined, walletDeposits);
+    const depIdx = walletDeposits.findIndex(d => d.id === id);
+    let deposit = allDeposits.find(d => d.id === id) || (depIdx !== -1 ? walletDeposits[depIdx] : null);
+
     if (!deposit) {
       return res.status(404).json({ error: 'Demande de dépôt non trouvée.' });
     }
 
     const oldStatus = deposit.status;
-    deposit.status = status as 'en_attente' | 'valide' | 'rejete';
-    deposit.adminNote = adminNote || deposit.adminNote;
+    deposit.status = status as DepositStatus;
+    if (adminNote !== undefined) {
+      deposit.adminNote = adminNote;
+    }
 
     const allUsers = await fetchUsersFromSupabase(users);
-    const user = allUsers.find(u => u.email.toLowerCase() === deposit.userEmail.toLowerCase());
+    const normalizedEmail = deposit.userEmail.toLowerCase().trim();
+    let user = allUsers.find(u => u.email.toLowerCase().trim() === normalizedEmail) || users.find(u => u.email.toLowerCase().trim() === normalizedEmail);
 
     if (user) {
       if (status === 'valide' && oldStatus !== 'valide') {
         user.walletBalanceHTG += deposit.amountHTG;
-        await syncUserToSupabase(user);
       } else if (oldStatus === 'valide' && status !== 'valide') {
         user.walletBalanceHTG = Math.max(0, user.walletBalanceHTG - deposit.amountHTG);
-        await syncUserToSupabase(user);
       }
+
+      // Sync updated user balance back to server memory array
+      const uIdx = users.findIndex(u => u.email.toLowerCase().trim() === normalizedEmail);
+      if (uIdx !== -1) {
+        users[uIdx].walletBalanceHTG = user.walletBalanceHTG;
+      } else {
+        users.push(user);
+      }
+
+      await syncUserToSupabase(user);
+    }
+
+    if (depIdx !== -1) {
+      walletDeposits[depIdx] = deposit;
+    } else {
+      walletDeposits.unshift(deposit);
     }
 
     saveDataStore();
     await syncDepositToSupabase(deposit);
 
-    res.json({ message: `Statut du dépôt mis à jour en '${status}'.`, deposit, userWalletBalance: user?.walletBalanceHTG });
+    res.json({
+      message: `Statut du dépôt mis à jour en '${status}'.`,
+      deposit,
+      userWalletBalance: user?.walletBalanceHTG
+    });
   } catch (err: any) {
     console.error('Error in PUT /api/wallet/deposits/:id:', err);
     res.status(500).json({ error: err?.message || 'Erreur lors de la mise à jour du dépôt.' });
@@ -602,27 +625,60 @@ app.put('/api/wallet/deposits/:id', async (req, res) => {
 
 app.post('/api/wallet/adjust', async (req, res) => {
   try {
-    const { userEmail, amountHTG, type } = req.body || {};
-    const allUsers = await fetchUsersFromSupabase(users);
-    const user = allUsers.find(u => u.email.toLowerCase() === String(userEmail).toLowerCase().trim());
+    const { userEmail, amountHTG, type, adminNote } = req.body || {};
+    const normalizedEmail = String(userEmail || '').toLowerCase().trim();
+    const amount = Number(amountHTG);
 
-    if (!user) {
-      return res.status(404).json({ error: 'Utilisateur introuvable.' });
+    if (!normalizedEmail || isNaN(amount) || amount <= 0) {
+      return res.status(400).json({ error: 'Adresse email et montant valide requis.' });
     }
 
-    const amount = Number(amountHTG);
+    const allUsers = await fetchUsersFromSupabase(users);
+    let user = allUsers.find(u => u.email.toLowerCase().trim() === normalizedEmail) || users.find(u => u.email.toLowerCase().trim() === normalizedEmail);
+
+    if (!user) {
+      return res.status(404).json({ error: `Utilisateur avec l'email (${normalizedEmail}) introuvable.` });
+    }
+
     if (type === 'deduct') {
       user.walletBalanceHTG = Math.max(0, user.walletBalanceHTG - amount);
     } else {
       user.walletBalanceHTG += amount;
     }
 
+    // Update global users array in server memory
+    const uIdx = users.findIndex(u => u.email.toLowerCase().trim() === normalizedEmail);
+    if (uIdx !== -1) {
+      users[uIdx].walletBalanceHTG = user.walletBalanceHTG;
+    } else {
+      users.push(user);
+    }
+
+    // Create a manual deposit transaction log entry so this recharge is preserved in history
+    const manualDeposit: WalletDeposit = {
+      id: `dep-man-${Date.now()}`,
+      userId: user.id,
+      userEmail: user.email,
+      userName: user.name,
+      userPhone: user.phone || 'Non spécifié',
+      transactionId14: `ADM-${Date.now().toString().slice(-8)}`,
+      paymentMethod: 'admin_manual',
+      amountHTG: type === 'deduct' ? -amount : amount,
+      status: 'valide',
+      createdAt: new Date().toISOString(),
+      adminNote: adminNote || (type === 'deduct' ? `Déduction manuelle par l'administrateur (-${amount} HTG)` : `Recharge manuelle effectuée par l'administrateur (+${amount} HTG)`)
+    };
+
+    walletDeposits.unshift(manualDeposit);
     saveDataStore();
+
     await syncUserToSupabase(user);
+    await syncDepositToSupabase(manualDeposit);
 
     res.json({
-      message: `Ajustement du portefeuille effectué. Nouveau solde de ${user.name}: ${user.walletBalanceHTG} HTG.`,
-      user
+      message: `Ajustement du solde effectué avec succès ! Nouveau solde de ${user.name} (${user.email}): ${user.walletBalanceHTG} HTG.`,
+      user,
+      deposit: manualDeposit
     });
   } catch (err: any) {
     console.error('Error in /api/wallet/adjust:', err);
