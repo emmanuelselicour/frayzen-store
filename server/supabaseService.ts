@@ -634,9 +634,9 @@ export const syncUserToSupabase = async (user: UserProfile) => {
 export const syncDepositToSupabase = async (deposit: WalletDeposit) => {
   if (!supabaseAdmin) return;
   try {
-    await supabaseAdmin.from('wallet_deposits').upsert({
-      id: deposit.id,
-      user_id: deposit.userId,
+    const fullPayload = {
+      id: String(deposit.id).trim(),
+      user_id: String(deposit.userId || '').trim(),
       user_email: deposit.userEmail,
       user_name: deposit.userName,
       user_phone: deposit.userPhone,
@@ -647,7 +647,31 @@ export const syncDepositToSupabase = async (deposit: WalletDeposit) => {
       created_at: deposit.createdAt,
       admin_note: deposit.adminNote || null,
       screenshot_url: deposit.screenshotUrl || null
-    }, { onConflict: 'id' });
+    };
+
+    const { error } = await supabaseAdmin.from('wallet_deposits').upsert(fullPayload, { onConflict: 'id' });
+
+    if (error) {
+      console.error('[Supabase] Error in syncDepositToSupabase:', error.message || error);
+      // Fallback: try minimal payload in case optional columns are missing in user Supabase schema
+      const minimalPayload = {
+        id: String(deposit.id).trim(),
+        user_email: deposit.userEmail,
+        user_name: deposit.userName,
+        transaction_id_14: deposit.transactionId14,
+        amount_htg: deposit.amountHTG,
+        status: deposit.status,
+        created_at: deposit.createdAt
+      };
+      const { error: minErr } = await supabaseAdmin.from('wallet_deposits').upsert(minimalPayload, { onConflict: 'id' });
+      if (minErr) {
+        console.error('[Supabase] Minimal fallback syncDepositToSupabase error:', minErr.message || minErr);
+      } else {
+        console.log('[Supabase] Minimal fallback syncDepositToSupabase succeeded for:', deposit.id);
+      }
+    } else {
+      console.log('[Supabase] Deposit synced successfully:', deposit.id);
+    }
   } catch (err) {
     handleSupabaseError('Erreur sync deposit', err);
   }
@@ -656,12 +680,12 @@ export const syncDepositToSupabase = async (deposit: WalletDeposit) => {
 export const syncOrderToSupabase = async (order: Order) => {
   if (!supabaseAdmin) return;
   try {
-    await supabaseAdmin.from('orders').upsert({
-      id: order.id,
-      user_id: order.userId,
+    const fullPayload = {
+      id: String(order.id).trim(),
+      user_id: String(order.userId || '').trim(),
       user_email: order.userEmail,
       user_name: order.userName,
-      product_id: order.productId,
+      product_id: String(order.productId || '').trim(),
       product_name: order.productName,
       price_htg: order.priceHTG,
       game_player_id: order.gamePlayerId,
@@ -670,7 +694,32 @@ export const syncOrderToSupabase = async (order: Order) => {
       pin_code_delivered: order.pinCodeDelivered || null,
       status: order.status,
       created_at: order.createdAt
-    }, { onConflict: 'id' });
+    };
+
+    const { error } = await supabaseAdmin.from('orders').upsert(fullPayload, { onConflict: 'id' });
+
+    if (error) {
+      console.error('[Supabase] Error in syncOrderToSupabase:', error.message || error);
+      // Fallback: try minimal payload
+      const minimalPayload = {
+        id: String(order.id).trim(),
+        user_email: order.userEmail,
+        product_name: order.productName,
+        price_htg: order.priceHTG,
+        game_player_id: order.gamePlayerId,
+        payment_method: order.paymentMethod,
+        status: order.status,
+        created_at: order.createdAt
+      };
+      const { error: minErr } = await supabaseAdmin.from('orders').upsert(minimalPayload, { onConflict: 'id' });
+      if (minErr) {
+        console.error('[Supabase] Minimal fallback syncOrderToSupabase error:', minErr.message || minErr);
+      } else {
+        console.log('[Supabase] Minimal fallback syncOrderToSupabase succeeded for order:', order.id);
+      }
+    } else {
+      console.log('[Supabase] Order synced successfully:', order.id);
+    }
   } catch (err) {
     handleSupabaseError('Erreur sync order', err);
   }
