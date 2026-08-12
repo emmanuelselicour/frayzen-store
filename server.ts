@@ -432,7 +432,7 @@ app.get('/api/user/profile/:email', async (req, res) => {
       user.isAdmin = true;
     }
 
-    const allOrders = await fetchOrdersFromSupabase();
+    const allOrders = await fetchOrdersFromSupabase(undefined, orders);
     const userOrders = allOrders.filter(o => o.userEmail.toLowerCase() === user.email.toLowerCase());
     const successfulCount = userOrders.filter(o => o.status === 'reussi').length;
     const failedCount = userOrders.filter(o => o.status === 'echoue').length;
@@ -462,7 +462,7 @@ app.get('/api/users', async (req, res) => {
 app.get('/api/admin/users-detailed', async (req, res) => {
   try {
     const allUsers = await fetchUsersFromSupabase(users);
-    const allOrders = await fetchOrdersFromSupabase();
+    const allOrders = await fetchOrdersFromSupabase(undefined, orders);
 
     const detailedUsers = allUsers.map(u => {
       const userOrders = allOrders.filter(o => o.userEmail.toLowerCase() === u.email.toLowerCase());
@@ -511,7 +511,7 @@ app.post('/api/wallet/deposit', async (req, res) => {
       }
     }
 
-    const allDeposits = await fetchDepositsFromSupabase();
+    const allDeposits = await fetchDepositsFromSupabase(undefined, walletDeposits);
     const duplicateTx = allDeposits.find(d => d.transactionId14 === cleanedTxId);
 
     if (duplicateTx) {
@@ -555,6 +555,14 @@ app.get('/api/wallet/deposits', async (req, res) => {
   try {
     const { email } = req.query;
     const deps = await fetchDepositsFromSupabase(email ? String(email) : undefined, walletDeposits);
+    if (!email && deps.length > 0) {
+      for (const d of deps) {
+        if (!walletDeposits.some(item => String(item.id).trim() === String(d.id).trim())) {
+          walletDeposits.push(d);
+        }
+      }
+      saveDataStore();
+    }
     res.json(deps);
   } catch (err: any) {
     console.error('Error in GET /api/wallet/deposits:', err);
@@ -823,6 +831,14 @@ app.get('/api/orders', async (req, res) => {
   try {
     const { email } = req.query;
     const ords = await fetchOrdersFromSupabase(email ? String(email) : undefined, orders);
+    if (!email && ords.length > 0) {
+      for (const o of ords) {
+        if (!orders.some(item => String(item.id).trim() === String(o.id).trim())) {
+          orders.push(o);
+        }
+      }
+      saveDataStore();
+    }
     res.json(ords);
   } catch (err: any) {
     console.error('Error in GET /api/orders:', err);
@@ -956,9 +972,9 @@ app.delete('/api/contact/:id', async (req, res) => {
 // Admin Stats Dashboard API
 app.get('/api/admin/stats', async (req, res) => {
   try {
-    const allOrders = await fetchOrdersFromSupabase();
+    const allOrders = await fetchOrdersFromSupabase(undefined, orders);
     const allUsers = await fetchUsersFromSupabase(users);
-    const allDeposits = await fetchDepositsFromSupabase();
+    const allDeposits = await fetchDepositsFromSupabase(undefined, walletDeposits);
     const allTickets = await fetchTicketsFromSupabase(tickets);
 
     const successfulOrders = allOrders.filter(o => o.status === 'reussi');

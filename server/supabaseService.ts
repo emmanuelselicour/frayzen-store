@@ -469,27 +469,52 @@ export const fetchTicketsFromSupabase = async (fallbackTickets: ContactTicket[] 
   if (Array.isArray(fallbackTickets)) {
     for (const t of fallbackTickets) {
       if (t && t.id) {
-        ticketsMap.set(t.id, t);
+        ticketsMap.set(String(t.id).trim(), t);
       }
     }
   }
 
   if (supabaseAdmin) {
+    // 1. Fetch from 'contacts' table
     try {
-      const { data, error } = await supabaseAdmin.from('tickets').select('*').order('created_at', { ascending: false });
-      if (data && !error && Array.isArray(data)) {
-        for (const t of data) {
-          ticketsMap.set(t.id, {
-            id: t.id,
-            userId: t.user_id || t.userId,
-            userName: t.user_name || t.userName,
-            userEmail: t.user_email || t.userEmail,
-            userPhone: t.user_phone || t.userPhone,
-            subject: t.subject,
-            message: t.message,
+      const { data: contactsData, error: cErr } = await supabaseAdmin.from('contacts').select('*').order('created_at', { ascending: false });
+      if (contactsData && !cErr && Array.isArray(contactsData)) {
+        for (const c of contactsData) {
+          const item: ContactTicket = {
+            id: String(c.id),
+            userId: c.user_id || c.userId || '',
+            userName: c.name || c.user_name || c.userName || '',
+            userEmail: c.email || c.user_email || c.userEmail || '',
+            userPhone: c.phone || c.user_phone || c.userPhone || '',
+            subject: c.subject || 'Support',
+            message: c.message || '',
+            status: c.status || 'nouveau',
+            createdAt: c.created_at || c.createdAt || new Date().toISOString()
+          };
+          ticketsMap.set(String(item.id).trim(), item);
+        }
+      }
+    } catch (err) {
+      handleSupabaseError('Erreur lecture contacts', err);
+    }
+
+    // 2. Fetch from 'tickets' table
+    try {
+      const { data: ticketsData, error: tErr } = await supabaseAdmin.from('tickets').select('*').order('created_at', { ascending: false });
+      if (ticketsData && !tErr && Array.isArray(ticketsData)) {
+        for (const t of ticketsData) {
+          const item: ContactTicket = {
+            id: String(t.id),
+            userId: t.user_id || t.userId || '',
+            userName: t.user_name || t.userName || '',
+            userEmail: t.user_email || t.userEmail || '',
+            userPhone: t.user_phone || t.userPhone || '',
+            subject: t.subject || 'Support',
+            message: t.message || '',
             status: t.status || 'nouveau',
-            createdAt: t.created_at || t.createdAt
-          });
+            createdAt: t.created_at || t.createdAt || new Date().toISOString()
+          };
+          ticketsMap.set(String(item.id).trim(), item);
         }
       }
     } catch (err) {
@@ -634,9 +659,12 @@ export const syncUserToSupabase = async (user: UserProfile) => {
 export const syncDepositToSupabase = async (deposit: WalletDeposit) => {
   if (!supabaseAdmin) return;
   try {
-    const fullPayload = {
+    const rawUserId = String(deposit.userId || '').trim();
+    const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(rawUserId);
+
+    const fullPayload: any = {
       id: String(deposit.id).trim(),
-      user_id: String(deposit.userId || '').trim(),
+      user_id: isUuid ? rawUserId : null,
       user_email: deposit.userEmail,
       user_name: deposit.userName,
       user_phone: deposit.userPhone,
@@ -653,21 +681,29 @@ export const syncDepositToSupabase = async (deposit: WalletDeposit) => {
 
     if (error) {
       console.error('[Supabase] Error in syncDepositToSupabase:', error.message || error);
-      // Fallback: try minimal payload in case optional columns are missing in user Supabase schema
-      const minimalPayload = {
-        id: String(deposit.id).trim(),
-        user_email: deposit.userEmail,
-        user_name: deposit.userName,
-        transaction_id_14: deposit.transactionId14,
-        amount_htg: deposit.amountHTG,
-        status: deposit.status,
-        created_at: deposit.createdAt
-      };
-      const { error: minErr } = await supabaseAdmin.from('wallet_deposits').upsert(minimalPayload, { onConflict: 'id' });
-      if (minErr) {
-        console.error('[Supabase] Minimal fallback syncDepositToSupabase error:', minErr.message || minErr);
+      // Fallback 1: Try without user_id in case user_id constraint is strictly UUID or missing
+      delete fullPayload.user_id;
+      const { error: err2 } = await supabaseAdmin.from('wallet_deposits').upsert(fullPayload, { onConflict: 'id' });
+      
+      if (err2) {
+        // Fallback 2: Minimal payload
+        const minimalPayload = {
+          id: String(deposit.id).trim(),
+          user_email: deposit.userEmail,
+          user_name: deposit.userName,
+          transaction_id_14: deposit.transactionId14,
+          amount_htg: deposit.amountHTG,
+          status: deposit.status,
+          created_at: deposit.createdAt
+        };
+        const { error: minErr } = await supabaseAdmin.from('wallet_deposits').upsert(minimalPayload, { onConflict: 'id' });
+        if (minErr) {
+          console.error('[Supabase] Minimal fallback syncDepositToSupabase error:', minErr.message || minErr);
+        } else {
+          console.log('[Supabase] Minimal fallback syncDepositToSupabase succeeded for:', deposit.id);
+        }
       } else {
-        console.log('[Supabase] Minimal fallback syncDepositToSupabase succeeded for:', deposit.id);
+        console.log('[Supabase] Fallback 1 syncDepositToSupabase succeeded for:', deposit.id);
       }
     } else {
       console.log('[Supabase] Deposit synced successfully:', deposit.id);
@@ -680,12 +716,18 @@ export const syncDepositToSupabase = async (deposit: WalletDeposit) => {
 export const syncOrderToSupabase = async (order: Order) => {
   if (!supabaseAdmin) return;
   try {
-    const fullPayload = {
+    const rawUserId = String(order.userId || '').trim();
+    const isUserUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(rawUserId);
+
+    const rawProductId = String(order.productId || '').trim();
+    const isProdUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(rawProductId);
+
+    const fullPayload: any = {
       id: String(order.id).trim(),
-      user_id: String(order.userId || '').trim(),
+      user_id: isUserUuid ? rawUserId : null,
       user_email: order.userEmail,
       user_name: order.userName,
-      product_id: String(order.productId || '').trim(),
+      product_id: isProdUuid ? rawProductId : rawProductId,
       product_name: order.productName,
       price_htg: order.priceHTG,
       game_player_id: order.gamePlayerId,
@@ -696,26 +738,35 @@ export const syncOrderToSupabase = async (order: Order) => {
       created_at: order.createdAt
     };
 
-    const { error } = await supabaseAdmin.from('orders').upsert(fullPayload, { onConflict: 'id' });
+    let { error } = await supabaseAdmin.from('orders').upsert(fullPayload, { onConflict: 'id' });
 
     if (error) {
-      console.error('[Supabase] Error in syncOrderToSupabase:', error.message || error);
-      // Fallback: try minimal payload
-      const minimalPayload = {
-        id: String(order.id).trim(),
-        user_email: order.userEmail,
-        product_name: order.productName,
-        price_htg: order.priceHTG,
-        game_player_id: order.gamePlayerId,
-        payment_method: order.paymentMethod,
-        status: order.status,
-        created_at: order.createdAt
-      };
-      const { error: minErr } = await supabaseAdmin.from('orders').upsert(minimalPayload, { onConflict: 'id' });
-      if (minErr) {
-        console.error('[Supabase] Minimal fallback syncOrderToSupabase error:', minErr.message || minErr);
+      console.error('[Supabase] Error in syncOrderToSupabase fullPayload:', error.message || error);
+      // Fallback 1: Try setting product_id to null if product_id constraint/type failed
+      const payload2 = { ...fullPayload, product_id: isProdUuid ? rawProductId : null, user_id: null };
+      const { error: err2 } = await supabaseAdmin.from('orders').upsert(payload2, { onConflict: 'id' });
+
+      if (err2) {
+        console.error('[Supabase] Fallback 1 syncOrderToSupabase error:', err2.message || err2);
+        // Fallback 2: Minimal payload
+        const minimalPayload = {
+          id: String(order.id).trim(),
+          user_email: order.userEmail,
+          product_name: order.productName,
+          price_htg: order.priceHTG,
+          game_player_id: order.gamePlayerId,
+          payment_method: order.paymentMethod,
+          status: order.status,
+          created_at: order.createdAt
+        };
+        const { error: minErr } = await supabaseAdmin.from('orders').upsert(minimalPayload, { onConflict: 'id' });
+        if (minErr) {
+          console.error('[Supabase] Minimal fallback syncOrderToSupabase error:', minErr.message || minErr);
+        } else {
+          console.log('[Supabase] Minimal fallback syncOrderToSupabase succeeded for order:', order.id);
+        }
       } else {
-        console.log('[Supabase] Minimal fallback syncOrderToSupabase succeeded for order:', order.id);
+        console.log('[Supabase] Fallback 1 syncOrderToSupabase succeeded for order:', order.id);
       }
     } else {
       console.log('[Supabase] Order synced successfully:', order.id);
@@ -727,10 +778,49 @@ export const syncOrderToSupabase = async (order: Order) => {
 
 export const syncTicketToSupabase = async (ticket: ContactTicket) => {
   if (!supabaseAdmin) return;
+  const rawUserId = String(ticket.userId || '').trim();
+  const isUserUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(rawUserId);
+
+  // 1. Sync to 'contacts' table
   try {
-    await supabaseAdmin.from('tickets').upsert({
-      id: ticket.id,
-      user_id: ticket.userId || null,
+    const contactPayload: any = {
+      id: String(ticket.id).trim(),
+      user_id: isUserUuid ? rawUserId : null,
+      name: ticket.userName,
+      user_name: ticket.userName,
+      email: ticket.userEmail,
+      user_email: ticket.userEmail,
+      phone: ticket.userPhone || null,
+      user_phone: ticket.userPhone || null,
+      subject: ticket.subject,
+      message: ticket.message,
+      status: ticket.status,
+      created_at: ticket.createdAt
+    };
+
+    const { error: cErr } = await supabaseAdmin.from('contacts').upsert(contactPayload, { onConflict: 'id' });
+    if (cErr) {
+      const minContact = {
+        id: String(ticket.id).trim(),
+        name: ticket.userName,
+        email: ticket.userEmail,
+        phone: ticket.userPhone || null,
+        subject: ticket.subject,
+        message: ticket.message,
+        status: ticket.status,
+        created_at: ticket.createdAt
+      };
+      await supabaseAdmin.from('contacts').upsert(minContact, { onConflict: 'id' });
+    }
+  } catch (err) {
+    handleSupabaseError('Erreur sync contacts', err);
+  }
+
+  // 2. Sync to 'tickets' table
+  try {
+    const ticketPayload: any = {
+      id: String(ticket.id).trim(),
+      user_id: isUserUuid ? rawUserId : null,
       user_name: ticket.userName,
       user_email: ticket.userEmail,
       user_phone: ticket.userPhone || null,
@@ -738,8 +828,14 @@ export const syncTicketToSupabase = async (ticket: ContactTicket) => {
       message: ticket.message,
       status: ticket.status,
       created_at: ticket.createdAt
-    }, { onConflict: 'id' });
+    };
+
+    const { error: tErr } = await supabaseAdmin.from('tickets').upsert(ticketPayload, { onConflict: 'id' });
+    if (tErr) {
+      delete ticketPayload.user_id;
+      await supabaseAdmin.from('tickets').upsert(ticketPayload, { onConflict: 'id' });
+    }
   } catch (err) {
-    handleSupabaseError('Erreur sync ticket', err);
+    handleSupabaseError('Erreur sync tickets', err);
   }
 };
