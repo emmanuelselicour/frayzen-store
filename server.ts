@@ -830,19 +830,27 @@ app.post('/api/orders', async (req, res) => {
 app.get('/api/orders', async (req, res) => {
   try {
     const { email } = req.query;
-    const ords = await fetchOrdersFromSupabase(email ? String(email) : undefined, orders);
-    if (!email && ords.length > 0) {
-      for (const o of ords) {
-        if (!orders.some(item => String(item.id).trim() === String(o.id).trim())) {
-          orders.push(o);
-        }
+    const targetEmail = email ? String(email).trim() : undefined;
+    
+    // Always fetch orders from Supabase merged with local memory
+    const ords = await fetchOrdersFromSupabase(targetEmail, orders);
+    
+    // Update local memory store with fresh orders
+    for (const o of ords) {
+      const existingIdx = orders.findIndex(item => String(item.id).trim() === String(o.id).trim());
+      if (existingIdx !== -1) {
+        orders[existingIdx] = { ...orders[existingIdx], ...o };
+      } else {
+        orders.push(o);
       }
-      saveDataStore();
     }
+    saveDataStore();
+
     res.json(ords);
   } catch (err: any) {
     console.error('Error in GET /api/orders:', err);
-    res.json(orders);
+    const qEmail = req.query.email ? String(req.query.email).toLowerCase().trim() : undefined;
+    res.json(qEmail ? orders.filter(o => o.userEmail.toLowerCase().trim() === qEmail) : orders);
   }
 });
 
@@ -977,8 +985,14 @@ app.get('/api/admin/stats', async (req, res) => {
     const allDeposits = await fetchDepositsFromSupabase(undefined, walletDeposits);
     const allTickets = await fetchTicketsFromSupabase(tickets);
 
-    const successfulOrders = allOrders.filter(o => o.status === 'reussi');
-    const totalAmountPurchasedHTG = successfulOrders.reduce((acc, o) => acc + o.priceHTG, 0);
+    const isSuccessfulStatus = (st?: string) => {
+      if (!st) return false;
+      const s = String(st).toLowerCase().trim();
+      return s === 'reussi' || s === 'réussi' || s === 'valide' || s === 'completed' || s === 'success';
+    };
+
+    const successfulOrders = allOrders.filter(o => isSuccessfulStatus(o.status));
+    const totalAmountPurchasedHTG = successfulOrders.reduce((acc, o) => acc + (Number(o.priceHTG) || 0), 0);
 
     const packSalesMap: Record<string, { productName: string; count: number; totalHTG: number }> = {};
     successfulOrders.forEach(o => {
@@ -987,7 +1001,7 @@ app.get('/api/admin/stats', async (req, res) => {
         packSalesMap[pName] = { productName: pName, count: 0, totalHTG: 0 };
       }
       packSalesMap[pName].count += 1;
-      packSalesMap[pName].totalHTG += o.priceHTG;
+      packSalesMap[pName].totalHTG += (Number(o.priceHTG) || 0);
     });
 
     const packSales = Object.values(packSalesMap).sort((a, b) => b.count - a.count);
@@ -999,13 +1013,22 @@ app.get('/api/admin/stats', async (req, res) => {
 
     const buyersMap: Record<string, { userName: string; email: string; totalAmountHTG: number; ordersCount: number; lastOrderDate?: string }> = {};
     successfulOrders.forEach(o => {
-      if (!buyersMap[o.userEmail]) {
-        buyersMap[o.userEmail] = { userName: o.userName, email: o.userEmail, totalAmountHTG: 0, ordersCount: 0, lastOrderDate: o.createdAt };
+      const emailKey = String(o.userEmail || '').toLowerCase().trim();
+      if (!emailKey) return;
+
+      if (!buyersMap[emailKey]) {
+        buyersMap[emailKey] = {
+          userName: o.userName || emailKey.split('@')[0],
+          email: o.userEmail || emailKey,
+          totalAmountHTG: 0,
+          ordersCount: 0,
+          lastOrderDate: o.createdAt
+        };
       }
-      buyersMap[o.userEmail].totalAmountHTG += o.priceHTG;
-      buyersMap[o.userEmail].ordersCount += 1;
-      if (!buyersMap[o.userEmail].lastOrderDate || new Date(o.createdAt).getTime() > new Date(buyersMap[o.userEmail].lastOrderDate!).getTime()) {
-        buyersMap[o.userEmail].lastOrderDate = o.createdAt;
+      buyersMap[emailKey].totalAmountHTG += (Number(o.priceHTG) || 0);
+      buyersMap[emailKey].ordersCount += 1;
+      if (!buyersMap[emailKey].lastOrderDate || new Date(o.createdAt).getTime() > new Date(buyersMap[emailKey].lastOrderDate!).getTime()) {
+        buyersMap[emailKey].lastOrderDate = o.createdAt;
       }
     });
 
@@ -1013,8 +1036,8 @@ app.get('/api/admin/stats', async (req, res) => {
       .sort((a, b) => b.totalAmountHTG - a.totalAmountHTG)
       .slice(0, 10);
 
-    const pendingDepositsCount = allDeposits.filter(d => d.status === 'en_attente').length;
-    const newTicketsCount = allTickets.filter(t => t.status === 'nouveau').length;
+    const pendingDepositsCount = allDeposits.filter(d => String(d.status).toLowerCase().trim() === 'en_attente').length;
+    const newTicketsCount = allTickets.filter(t => String(t.status).toLowerCase().trim() === 'nouveau').length;
 
     const stats: AdminStats = {
       totalSalesCount: successfulOrders.length,

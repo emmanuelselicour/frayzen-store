@@ -82,6 +82,25 @@ export const parsePinCodes = (rawPins: any): string[] => {
 };
 
 export const fetchProductsFromSupabase = async (localProductsFallback?: Product[]): Promise<Product[]> => {
+  const productsMap = new Map<string, Product>();
+
+  // 1. Load local fallback products
+  if (Array.isArray(localProductsFallback)) {
+    for (const p of localProductsFallback) {
+      if (p && p.id) {
+        productsMap.set(String(p.id).trim(), { ...p, pinCodes: Array.isArray(p.pinCodes) ? [...p.pinCodes] : [] });
+      }
+    }
+  }
+
+  // 2. Load INITIAL_PRODUCTS
+  for (const initP of INITIAL_PRODUCTS) {
+    if (!productsMap.has(initP.id)) {
+      productsMap.set(initP.id, { ...initP, pinCodes: Array.isArray(initP.pinCodes) ? [...initP.pinCodes] : [] });
+    }
+  }
+
+  // 3. Query Supabase
   if (supabaseAdmin) {
     try {
       const { data, error } = await supabaseAdmin
@@ -90,153 +109,63 @@ export const fetchProductsFromSupabase = async (localProductsFallback?: Product[
         .order('created_at', { ascending: false });
 
       if (data && data.length > 0 && !error) {
-        // Map raw DB rows to Product objects, matching with INITIAL_PRODUCTS
-        const rawProducts: { prod: Product; originalId: string; rawName: string }[] = data.map((p: any, idx: number) => {
+        for (const p of data) {
+          const pId = String(p.id || '').trim();
+          if (!pId) continue;
+
           const rawPrice = p.price_htg ?? p.priceHTG ?? p.price_HTG ?? p.price ?? p.amount ?? p.cost;
           const numPrice = Number(rawPrice);
           const numDiamonds = p.diamonds ? Number(p.diamonds) : undefined;
 
-          // Find match in INITIAL_PRODUCTS
-          let initMatch = INITIAL_PRODUCTS.find(i =>
-            i.id === p.id ||
-            (i.diamonds && numDiamonds && i.diamonds === numDiamonds) ||
-            (i.priceHTG && !isNaN(numPrice) && numPrice > 0 && i.priceHTG === numPrice) ||
-            (p.name && i.name && p.name.toLowerCase().trim() === i.name.toLowerCase().trim())
-          );
-
-          // Find match in localProductsFallback
-          const localMatch = localProductsFallback?.find(lp =>
-            lp.id === p.id ||
-            (lp.diamonds && numDiamonds && lp.diamonds === numDiamonds) ||
-            (lp.priceHTG && numPrice && lp.priceHTG === numPrice)
-          );
-
-          // If no initMatch, check if row index corresponds to INITIAL_PRODUCTS
-          if (!initMatch && idx < INITIAL_PRODUCTS.length && (!p.name || p.name === 'Produit')) {
-            initMatch = INITIAL_PRODUCTS[idx];
+          let existing = productsMap.get(pId);
+          if (!existing) {
+            existing = productsMap.get(`prod-${pId}`) || Array.from(productsMap.values()).find(item => item.id === pId || (numPrice > 0 && item.priceHTG === numPrice));
           }
 
           const finalPrice = (!isNaN(numPrice) && numPrice > 0)
             ? numPrice
-            : (initMatch?.priceHTG && initMatch.priceHTG > 0 ? initMatch.priceHTG : 0);
+            : (existing?.priceHTG || 0);
 
           const rawNameStr = String(p.name || '').trim();
           const finalName = (rawNameStr && rawNameStr !== 'Produit')
             ? rawNameStr
-            : (initMatch?.name || 'Produit');
+            : (existing?.name || 'Pack Diamants');
 
-          const finalDiamonds = numDiamonds || initMatch?.diamonds;
-          const finalBonus = p.bonus_diamonds ? Number(p.bonus_diamonds) : (p.bonusDiamonds ? Number(p.bonusDiamonds) : initMatch?.bonusDiamonds);
+          const finalDiamonds = numDiamonds || existing?.diamonds;
+          const finalBonus = p.bonus_diamonds ? Number(p.bonus_diamonds) : (p.bonusDiamonds ? Number(p.bonusDiamonds) : existing?.bonusDiamonds);
 
           const allowedMethods = Array.isArray(p.allowed_payment_methods)
             ? p.allowed_payment_methods
-            : (Array.isArray(p.allowedPaymentMethods) ? p.allowedPaymentMethods : (initMatch?.allowedPaymentMethods || (p.category === 'free_fire' || initMatch?.category === 'free_fire' ? ['wallet'] : ['wallet', 'moncash', 'natcash'])));
+            : (Array.isArray(p.allowedPaymentMethods) ? p.allowedPaymentMethods : (existing?.allowedPaymentMethods || (p.category === 'free_fire' ? ['wallet'] : ['wallet', 'moncash', 'natcash'])));
 
           const parsedDbPins = parsePinCodes(p.pin_codes ?? p.pinCodes ?? p.pin_code ?? p.pincodes);
-          const finalPinCodes = parsedDbPins.length > 0
-            ? parsedDbPins
-            : (localMatch?.pinCodes && localMatch.pinCodes.length > 0 ? localMatch.pinCodes : (initMatch?.pinCodes || []));
+          
+          // Combine DB pins with any locally known PINs so PINs are NEVER lost
+          const combinedPinsSet = new Set<string>();
+          if (existing?.pinCodes) {
+            existing.pinCodes.forEach(pin => combinedPinsSet.add(pin));
+          }
+          parsedDbPins.forEach(pin => combinedPinsSet.add(pin));
+          const finalPinCodes = Array.from(combinedPinsSet);
 
           const productObj: Product = {
-            id: p.id || initMatch?.id || `prod-${idx}`,
+            id: pId || existing?.id || `prod-${Date.now()}`,
             name: finalName,
-            category: (p.category as ProductCategory) || initMatch?.category || 'free_fire',
+            category: (p.category as ProductCategory) || existing?.category || 'free_fire',
             priceHTG: finalPrice,
             diamonds: finalDiamonds,
             bonusDiamonds: finalBonus,
-            image: p.image || initMatch?.image || 'https://images.unsplash.com/photo-1542751371-adc38448a05e?auto=format&fit=crop&w=600&q=80',
-            description: (p.description && p.description !== 'Produit' && p.description.trim() !== '') ? p.description : (initMatch?.description || 'Top Up par ID Free Fire - Livré à l\'instant'),
-            stock: p.stock !== undefined && p.stock !== null ? Number(p.stock) : (finalPinCodes.length > 0 ? finalPinCodes.length : (initMatch?.stock ?? 100)),
-            isPopular: p.is_popular !== undefined && p.is_popular !== null ? Boolean(p.is_popular) : Boolean(p.isPopular ?? initMatch?.isPopular),
+            image: p.image || existing?.image || 'https://images.unsplash.com/photo-1542751371-adc38448a05e?auto=format&fit=crop&w=600&q=80',
+            description: (p.description && p.description !== 'Produit' && p.description.trim() !== '') ? p.description : (existing?.description || 'Top Up par ID Free Fire'),
+            stock: p.stock !== undefined && p.stock !== null ? Math.max(Number(p.stock), finalPinCodes.length) : (finalPinCodes.length > 0 ? finalPinCodes.length : (existing?.stock ?? 100)),
+            isPopular: p.is_popular !== undefined && p.is_popular !== null ? Boolean(p.is_popular) : Boolean(p.isPopular ?? existing?.isPopular),
             pinCodes: finalPinCodes,
             allowedPaymentMethods: allowedMethods
           };
 
-          return { prod: productObj, originalId: String(p.id || ''), rawName: rawNameStr };
-        });
-
-        // Deduplicate: key = priceHTG or diamonds or id
-        const uniqueProductsMap = new Map<string, { prod: Product; originalId: string; rawName: string }>();
-        const idsToDeleteFromDB: string[] = [];
-
-        for (const item of rawProducts) {
-          const { prod, originalId, rawName } = item;
-
-          // Key for grouping
-          const key = prod.priceHTG > 0
-            ? `price-${prod.priceHTG}`
-            : (prod.diamonds ? `diam-${prod.diamonds}` : `id-${prod.id}`);
-
-          const existing = uniqueProductsMap.get(key);
-
-          if (!existing) {
-            uniqueProductsMap.set(key, item);
-          } else {
-            // Compare existing vs item: keep the better one
-            const existingIsGeneric = !existing.rawName || existing.rawName === 'Produit';
-            const itemIsGeneric = !rawName || rawName === 'Produit';
-
-            if (existingIsGeneric && !itemIsGeneric) {
-              // Replace existing with item
-              if (existing.originalId && existing.originalId !== item.originalId) {
-                idsToDeleteFromDB.push(existing.originalId);
-              }
-              uniqueProductsMap.set(key, item);
-            } else {
-              // Keep existing, discard item
-              if (originalId && originalId !== existing.originalId) {
-                idsToDeleteFromDB.push(originalId);
-              }
-            }
-          }
+          productsMap.set(productObj.id, productObj);
         }
-
-        // Delete duplicate IDs from Supabase DB asynchronously
-        for (const delId of idsToDeleteFromDB) {
-          if (delId) {
-            deleteProductFromSupabase(delId).catch(() => {});
-          }
-        }
-
-        const finalProductsList = Array.from(uniqueProductsMap.values()).map(item => item.prod);
-
-        // Ensure all default INITIAL_PRODUCTS exist
-        for (const initP of INITIAL_PRODUCTS) {
-          const exists = finalProductsList.some(p =>
-            p.id === initP.id ||
-            p.priceHTG === initP.priceHTG ||
-            (p.diamonds && initP.diamonds && p.diamonds === initP.diamonds) ||
-            p.name.toLowerCase().trim() === initP.name.toLowerCase().trim()
-          );
-
-          if (!exists) {
-            finalProductsList.push(initP);
-            syncProductToSupabase(initP).catch(() => {});
-          } else {
-            // Also sync updated/healed item to DB
-            const matched = finalProductsList.find(p => p.priceHTG === initP.priceHTG || p.id === initP.id);
-            if (matched) {
-              syncProductToSupabase(matched).catch(() => {});
-            }
-          }
-        }
-
-        // Clean up any remaining "Produit" generic named items if they duplicate a real pack
-        const cleanedProducts = finalProductsList.filter((p, index, self) => {
-          if (p.name === 'Produit') {
-            const hasBetter = self.some(other => other !== p && other.priceHTG === p.priceHTG && other.name !== 'Produit');
-            if (hasBetter) {
-              if (p.id) deleteProductFromSupabase(p.id).catch(() => {});
-              return false;
-            }
-          }
-          return true;
-        });
-
-        cleanedProducts.sort((a, b) => a.priceHTG - b.priceHTG);
-        return cleanedProducts;
       } else if (error || !data || data.length === 0) {
-        // Auto-seed INITIAL_PRODUCTS if table is empty
         for (const initP of INITIAL_PRODUCTS) {
           syncProductToSupabase(initP).catch(() => {});
         }
@@ -246,7 +175,9 @@ export const fetchProductsFromSupabase = async (localProductsFallback?: Product[
     }
   }
 
-  return INITIAL_PRODUCTS;
+  const resultList = Array.from(productsMap.values());
+  resultList.sort((a, b) => a.priceHTG - b.priceHTG);
+  return resultList;
 };
 
 export const fetchNatcashConfigFromSupabase = async (): Promise<NatcashConfig> => {
@@ -279,35 +210,35 @@ export const fetchNatcashConfigFromSupabase = async (): Promise<NatcashConfig> =
 export const fetchDepositsFromSupabase = async (email?: string, fallbackDeposits: WalletDeposit[] = []): Promise<WalletDeposit[]> => {
   const depsMap = new Map<string, WalletDeposit>();
 
+  // 1. Populate from local fallback
   if (Array.isArray(fallbackDeposits)) {
     for (const d of fallbackDeposits) {
       if (d && d.id) {
-        if (!email || d.userEmail?.toLowerCase().trim() === email.toLowerCase().trim()) {
-          depsMap.set(String(d.id).trim(), d);
-        }
+        depsMap.set(String(d.id).trim(), d);
       }
     }
   }
 
+  // 2. Query Supabase DB
   if (supabaseAdmin) {
     try {
-      let query = supabaseAdmin.from('wallet_deposits').select('*').order('created_at', { ascending: false });
-      if (email) {
-        query = query.ilike('user_email', email.trim());
-      }
-      const { data, error } = await query;
+      const { data, error } = await supabaseAdmin
+        .from('wallet_deposits')
+        .select('*')
+        .order('created_at', { ascending: false });
+
       if (data && !error) {
         for (const d of data) {
           const item: WalletDeposit = {
             id: String(d.id),
             userId: String(d.user_id || d.userId || ''),
-            userEmail: d.user_email || d.userEmail || '',
-            userName: d.user_name || d.userName || '',
-            userPhone: d.user_phone || d.userPhone || '',
-            transactionId14: d.transaction_id_14 || d.transactionId14 || '',
+            userEmail: d.user_email || d.userEmail || d.email || '',
+            userName: d.user_name || d.userName || d.name || '',
+            userPhone: d.user_phone || d.userPhone || d.phone || '',
+            transactionId14: d.transaction_id_14 || d.transactionId14 || d.transaction_id || '',
             paymentMethod: d.payment_method || d.paymentMethod || 'natcash',
-            amountHTG: Number(d.amount_htg ?? d.amountHTG ?? 0),
-            status: d.status,
+            amountHTG: Number(d.amount_htg ?? d.amountHTG ?? d.amount ?? 0),
+            status: d.status || 'en_attente',
             createdAt: d.created_at || d.createdAt || new Date().toISOString(),
             adminNote: d.admin_note || d.adminNote,
             screenshotUrl: d.screenshot_url || d.screenshotUrl
@@ -320,45 +251,51 @@ export const fetchDepositsFromSupabase = async (email?: string, fallbackDeposits
     }
   }
 
-  return Array.from(depsMap.values()).sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+  let result = Array.from(depsMap.values());
+  if (email) {
+    const targetEmail = String(email).toLowerCase().trim();
+    result = result.filter(d => d.userEmail.toLowerCase().trim() === targetEmail);
+  }
+
+  return result.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
 };
 
 export const fetchOrdersFromSupabase = async (email?: string, fallbackOrders: Order[] = []): Promise<Order[]> => {
   const ordersMap = new Map<string, Order>();
 
+  // 1. Populate from local fallback
   if (Array.isArray(fallbackOrders)) {
     for (const o of fallbackOrders) {
       if (o && o.id) {
-        if (!email || o.userEmail.toLowerCase().trim() === email.toLowerCase().trim()) {
-          ordersMap.set(String(o.id).trim(), o);
-        }
+        ordersMap.set(String(o.id).trim(), o);
       }
     }
   }
 
+  // 2. Query Supabase DB
   if (supabaseAdmin) {
     try {
-      let query = supabaseAdmin.from('orders').select('*').order('created_at', { ascending: false });
-      if (email) {
-        query = query.ilike('user_email', email.trim());
-      }
-      const { data, error } = await query;
+      const { data, error } = await supabaseAdmin
+        .from('orders')
+        .select('*')
+        .order('created_at', { ascending: false });
+
       if (data && !error) {
         for (const o of data) {
           const ordObj: Order = {
             id: String(o.id),
             userId: String(o.user_id || o.userId || ''),
-            userEmail: o.user_email || o.userEmail || '',
-            userName: o.user_name || o.userName || '',
+            userEmail: o.user_email || o.userEmail || o.email || '',
+            userName: o.user_name || o.userName || o.name || '',
             productId: String(o.product_id || o.productId || ''),
             productName: o.product_name || o.productName || '',
             priceHTG: Number(o.price_htg ?? o.priceHTG ?? o.price ?? 0),
-            gamePlayerId: o.game_player_id || o.gamePlayerId || '',
+            gamePlayerId: o.game_player_id || o.gamePlayerId || o.game_id || '',
             paymentMethod: o.payment_method || o.paymentMethod || 'wallet',
-            natcashTransactionId: o.natcash_transaction_id || o.natcashTransactionId,
-            pinCodeDelivered: o.pin_code_delivered || o.pinCodeDelivered,
-            status: o.status,
-            createdAt: o.created_at || o.createdAt
+            natcashTransactionId: o.natcash_transaction_id || o.natcashTransactionId || o.transaction_id,
+            pinCodeDelivered: o.pin_code_delivered || o.pinCodeDelivered || o.pin_code,
+            status: o.status || 'reussi',
+            createdAt: o.created_at || o.createdAt || new Date().toISOString()
           };
           ordersMap.set(String(ordObj.id).trim(), ordObj);
         }
@@ -368,7 +305,13 @@ export const fetchOrdersFromSupabase = async (email?: string, fallbackOrders: Or
     }
   }
 
-  return Array.from(ordersMap.values()).sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+  let result = Array.from(ordersMap.values());
+  if (email) {
+    const targetEmail = String(email).toLowerCase().trim();
+    result = result.filter(o => o.userEmail.toLowerCase().trim() === targetEmail);
+  }
+
+  return result.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
 };
 
 export const fetchUsersFromSupabase = async (fallbackUsers: UserProfile[] = []): Promise<UserProfile[]> => {

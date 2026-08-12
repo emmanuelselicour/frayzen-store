@@ -87,7 +87,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     };
   }, []);
 
-  const [products, setProducts] = useState<Product[]>([]);
+  const [products, setProducts] = useState<Product[]>(() => {
+    try {
+      const saved = localStorage.getItem('frayzen_cached_products');
+      if (saved) return JSON.parse(saved);
+    } catch { /* ignore */ }
+    return [];
+  });
+
   const [natcashConfig, setNatcashConfig] = useState<NatcashConfig>({
     number: '41355116',
     name: 'HENRY',
@@ -98,10 +105,32 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     supportEmail: 'contact@frayzenshop.com'
   });
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
-  const [deposits, setDeposits] = useState<WalletDeposit[]>([]);
-  const [orders, setOrders] = useState<Order[]>([]);
+
+  const [deposits, setDeposits] = useState<WalletDeposit[]>(() => {
+    try {
+      const saved = localStorage.getItem('frayzen_cached_deposits');
+      if (saved) return JSON.parse(saved);
+    } catch { /* ignore */ }
+    return [];
+  });
+
+  const [orders, setOrders] = useState<Order[]>(() => {
+    try {
+      const saved = localStorage.getItem('frayzen_cached_orders');
+      if (saved) return JSON.parse(saved);
+    } catch { /* ignore */ }
+    return [];
+  });
+
   const [tickets, setTickets] = useState<ContactTicket[]>([]);
-  const [adminStats, setAdminStats] = useState<AdminStats | null>(null);
+
+  const [adminStats, setAdminStats] = useState<AdminStats | null>(() => {
+    try {
+      const saved = localStorage.getItem('frayzen_cached_stats');
+      if (saved) return JSON.parse(saved);
+    } catch { /* ignore */ }
+    return null;
+  });
 
   const [user, setUser] = useState<UserProfile | null>(() => {
     const saved = localStorage.getItem('frayzen_user');
@@ -123,6 +152,30 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       localStorage.removeItem('frayzen_user');
     }
   }, [user]);
+
+  useEffect(() => {
+    if (orders.length > 0) {
+      try { localStorage.setItem('frayzen_cached_orders', JSON.stringify(orders)); } catch { /* ignore */ }
+    }
+  }, [orders]);
+
+  useEffect(() => {
+    if (deposits.length > 0) {
+      try { localStorage.setItem('frayzen_cached_deposits', JSON.stringify(deposits)); } catch { /* ignore */ }
+    }
+  }, [deposits]);
+
+  useEffect(() => {
+    if (products.length > 0) {
+      try { localStorage.setItem('frayzen_cached_products', JSON.stringify(products)); } catch { /* ignore */ }
+    }
+  }, [products]);
+
+  useEffect(() => {
+    if (adminStats) {
+      try { localStorage.setItem('frayzen_cached_stats', JSON.stringify(adminStats)); } catch { /* ignore */ }
+    }
+  }, [adminStats]);
 
   const showToast = (message: string, type: 'success' | 'error' | 'info' = 'info') => {
     setNotification({ type, message });
@@ -151,7 +204,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
       // Fetch products
       const resProds = await fetch('/api/products');
-      if (resProds.ok) setProducts(await resProds.json());
+      if (resProds.ok) {
+        const freshProds = await resProds.json();
+        setProducts(freshProds);
+      }
 
       // Fetch user profile if logged in
       if (user?.email) {
@@ -165,32 +221,53 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           localStorage.removeItem('frayzen_user');
         }
 
-        // Fetch deposits and orders (all for admin, user-specific for regular user)
+        // Fetch deposits and orders
         if (user.isAdmin) {
           const resDep = await fetch('/api/wallet/deposits');
-          if (resDep.ok) setDeposits(await resDep.json());
+          if (resDep.ok) {
+            const freshDeps = await resDep.json();
+            setDeposits(freshDeps);
+          }
 
           const resOrd = await fetch('/api/orders');
-          if (resOrd.ok) setOrders(await resOrd.json());
+          if (resOrd.ok) {
+            const freshOrds = await resOrd.json();
+            setOrders(freshOrds);
+          }
         } else {
           const resDep = await fetch(`/api/wallet/deposits?email=${encodeURIComponent(user.email)}`);
-          if (resDep.ok) setDeposits(await resDep.json());
+          if (resDep.ok) {
+            const freshDeps = await resDep.json();
+            setDeposits(freshDeps);
+          }
 
           const resOrd = await fetch(`/api/orders?email=${encodeURIComponent(user.email)}`);
-          if (resOrd.ok) setOrders(await resOrd.json());
+          if (resOrd.ok) {
+            const freshOrds = await resOrd.json();
+            setOrders(freshOrds);
+          }
         }
       } else {
         const resDep = await fetch('/api/wallet/deposits');
-        if (resDep.ok) setDeposits(await resDep.json());
+        if (resDep.ok) {
+          const freshDeps = await resDep.json();
+          setDeposits(freshDeps);
+        }
 
         const resOrd = await fetch('/api/orders');
-        if (resOrd.ok) setOrders(await resOrd.json());
+        if (resOrd.ok) {
+          const freshOrds = await resOrd.json();
+          setOrders(freshOrds);
+        }
       }
 
       // Always fetch admin stats and contact tickets
       try {
         const resStats = await fetch('/api/admin/stats');
-        if (resStats.ok) setAdminStats(await resStats.json());
+        if (resStats.ok) {
+          const freshStats = await resStats.json();
+          setAdminStats(freshStats);
+        }
       } catch { /* silent */ }
 
       try {
