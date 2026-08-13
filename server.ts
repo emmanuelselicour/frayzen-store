@@ -1,3 +1,4 @@
+import 'dotenv/config';
 import express from 'express';
 import path from 'path';
 import fs from 'fs';
@@ -539,7 +540,7 @@ app.post('/api/wallet/deposit', async (req, res) => {
 
     walletDeposits.unshift(newDeposit);
     saveDataStore();
-    await syncDepositToSupabase(newDeposit);
+    syncDepositToSupabase(newDeposit).catch(err => console.error('[Supabase Async Error]', err));
 
     res.status(201).json({
       message: `Demande de dépôt ${method.toUpperCase()} enregistrée avec succès. Un administrateur va vérifier votre transaction.`,
@@ -577,14 +578,21 @@ app.put('/api/wallet/deposits/:id', async (req, res) => {
 
     const targetId = String(id || '').trim();
     const allDeposits = await fetchDepositsFromSupabase(undefined, walletDeposits);
-    const depIdx = walletDeposits.findIndex(d => 
-      String(d.id).trim() === targetId || 
-      (d.transactionId14 && String(d.transactionId14).trim() === targetId)
-    );
-    let deposit = allDeposits.find(d => 
-      String(d.id).trim() === targetId || 
-      (d.transactionId14 && String(d.transactionId14).trim() === targetId)
-    ) || (depIdx !== -1 ? walletDeposits[depIdx] : null);
+
+    const isMatch = (d: WalletDeposit) => {
+      if (!d) return false;
+      const sId = String(d.id || '').trim();
+      const sTx = d.transactionId14 ? String(d.transactionId14).trim() : '';
+      return (
+        sId === targetId ||
+        sTx === targetId ||
+        toUuid(sId) === targetId ||
+        toUuid(sId) === toUuid(targetId)
+      );
+    };
+
+    const depIdx = walletDeposits.findIndex(isMatch);
+    let deposit = allDeposits.find(isMatch) || (depIdx !== -1 ? walletDeposits[depIdx] : null);
 
     if (!deposit) {
       console.error(`Demande de dépôt introuvable pour ID: '${id}'`);
@@ -598,8 +606,15 @@ app.put('/api/wallet/deposits/:id', async (req, res) => {
     }
 
     const allUsers = await fetchUsersFromSupabase(users);
-    const normalizedEmail = deposit.userEmail.toLowerCase().trim();
-    let user = allUsers.find(u => u.email.toLowerCase().trim() === normalizedEmail) || users.find(u => u.email.toLowerCase().trim() === normalizedEmail);
+    const normalizedEmail = deposit.userEmail ? deposit.userEmail.toLowerCase().trim() : '';
+
+    let user = allUsers.find(u => 
+      (normalizedEmail && u.email.toLowerCase().trim() === normalizedEmail) ||
+      (deposit.userId && (u.id === deposit.userId || u.id === toUuid(deposit.userId)))
+    ) || users.find(u => 
+      (normalizedEmail && u.email.toLowerCase().trim() === normalizedEmail) ||
+      (deposit.userId && (u.id === deposit.userId || u.id === toUuid(deposit.userId)))
+    );
 
     if (user) {
       if (status === 'valide' && oldStatus !== 'valide') {
@@ -609,24 +624,28 @@ app.put('/api/wallet/deposits/:id', async (req, res) => {
       }
 
       // Sync updated user balance back to server memory array
-      const uIdx = users.findIndex(u => u.email.toLowerCase().trim() === normalizedEmail);
+      const targetUserEmail = user.email.toLowerCase().trim();
+      const uIdx = users.findIndex(u => u.email.toLowerCase().trim() === targetUserEmail);
       if (uIdx !== -1) {
         users[uIdx].walletBalanceHTG = user.walletBalanceHTG;
       } else {
         users.push(user);
       }
 
-      await syncUserToSupabase(user);
+      syncUserToSupabase(user).catch(err => console.error('[Supabase Async Error]', err));
+    } else {
+      console.warn(`[Deposit Update] User not found for deposit email '${deposit.userEmail}' / ID '${deposit.userId}'`);
     }
 
-    if (depIdx !== -1) {
-      walletDeposits[depIdx] = { ...deposit };
+    const mIdx = walletDeposits.findIndex(isMatch);
+    if (mIdx !== -1) {
+      walletDeposits[mIdx] = { ...deposit };
     } else {
       walletDeposits.unshift({ ...deposit });
     }
 
     saveDataStore();
-    await syncDepositToSupabase(deposit);
+    syncDepositToSupabase(deposit).catch(err => console.error('[Supabase Async Error]', err));
 
     res.json({
       message: `Statut du dépôt mis à jour en '${status}'.`,

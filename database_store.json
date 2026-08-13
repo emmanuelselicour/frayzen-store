@@ -26,7 +26,8 @@
       "image": "https://images.unsplash.com/photo-1542751371-adc38448a05e?auto=format&fit=crop&w=600&q=80",
       "description": "Top Up par ID Free Fire - Livré à l'instant",
       "stock": 100,
-      "isPopular": false
+      "isPopular": false,
+      "pinCodes": []
     },
     {
       "id": "ff-300",
@@ -38,7 +39,8 @@
       "image": "https://images.unsplash.com/photo-1542751371-adc38448a05e?auto=format&fit=crop&w=600&q=80",
       "description": "Top Up par ID Free Fire - Livré à l'instant",
       "stock": 100,
-      "isPopular": true
+      "isPopular": true,
+      "pinCodes": []
     },
     {
       "id": "ff-400",
@@ -50,7 +52,8 @@
       "image": "https://images.unsplash.com/photo-1542751371-adc38448a05e?auto=format&fit=crop&w=600&q=80",
       "description": "Top Up par ID Free Fire - Livré à l'instant",
       "stock": 100,
-      "isPopular": false
+      "isPopular": false,
+      "pinCodes": []
     },
     {
       "id": "ff-500",
@@ -62,7 +65,8 @@
       "image": "https://images.unsplash.com/photo-1542751371-adc38448a05e?auto=format&fit=crop&w=600&q=80",
       "description": "Top Up par ID Free Fire - Livré à l'instant",
       "stock": 100,
-      "isPopular": true
+      "isPopular": true,
+      "pinCodes": []
     },
     {
       "id": "ff-1000",
@@ -74,7 +78,8 @@
       "image": "https://images.unsplash.com/photo-1542751371-adc38448a05e?auto=format&fit=crop&w=600&q=80",
       "description": "Top Up par ID Free Fire - Livré à l'instant",
       "stock": 100,
-      "isPopular": false
+      "isPopular": false,
+      "pinCodes": []
     },
     {
       "id": "ff-2000",
@@ -86,7 +91,8 @@
       "image": "https://images.unsplash.com/photo-1542751371-adc38448a05e?auto=format&fit=crop&w=600&q=80",
       "description": "Top Up par ID Free Fire - Livré à l'instant",
       "stock": 100,
-      "isPopular": false
+      "isPopular": false,
+      "pinCodes": []
     },
     {
       "id": "ff-5000",
@@ -98,7 +104,8 @@
       "image": "https://images.unsplash.com/photo-1542751371-adc38448a05e?auto=format&fit=crop&w=600&q=80",
       "description": "Top Up par ID Free Fire - Livré à l'instant",
       "stock": 100,
-      "isPopular": true
+      "isPopular": true,
+      "pinCodes": []
     }
   ],
   "natcashConfig": {
@@ -111,7 +118,121 @@
     "supportEmail": "contact@frayzenshop.com",
     "adminPin": "123456"
   },
-  "walletDeposits": [],
+  "walletDeposits": [
+    {
+      "id": "dep-1786622660976",
+      "userId": "usr-guest",
+      "userEmail": "client1786622656445@test.com",
+      "userName": "client1786622656445",
+      "userPhone": "Non spécifié",
+      "transactionId14": "01786622656445",
+      "paymentMethod": "natcash",
+      "amountHTG": 5000,
+      "status": "valide",
+      "createdAt": "2026-08-13T12:04:20.976Z",
+      "adminNote": "Approuvé par test"
+    },
+    {
+      "id": "dep-1786622646534",
+      "userId": "usr-guest",
+      "userEmail": "client1786622641978@test.com",
+      "userName": "client1786622641978",
+      "userPhone": "Non spécifié",
+      "transactionId14": "01786622641978",
+      "paymentMethod": "natcash",
+      "amountHTG": 5000,
+      "status": "valide",
+      "createdAt": "2026-08-13T12:04:06.534Z",
+      "adminNote": "Approuvé par test"
+    },
+    {
+      "id": "dep-1786622533114",
+      "userId": "usr-guest",
+      "userEmail": "client1786622528582@test.com",
+      "userName": "client1786622528582",
+      "userPhone": "Non spécifié",
+      "transactionId14": "01786622528582",
+      "paymentMethod": "natcash",
+      "amountHTG": 5000,
+      "status": "valide",
+      "createdAt": "2026-08-13T12:02:13.114Z",
+      "adminNote": "Approuvé par test"
+    },
+    {
+      "id": "dep-1786622513796",
+      "userId": "usr-guest",
+      "userEmail": "client1786622509239@test.com",
+      "userName": "client1786622509239",
+      "userPhone": "Non spécifié",
+      "transactionId14": "01786622509239",
+      "paymentMethod": "natcash",
+      "amountHTG": 3000,
+      "status": "valide",
+      "createdAt": "2026-08-13T12:01:53.796Z",
+      "adminNote": "Approuvé instantanément"
+    },
+    {
+      "id": "dep-1786622494459",
+      "userId": "usr-guest",
+      "userEmail": "client1786622466323@test.com",
+      "userName": "client1786622466323",
+      "userPhone": "Non spécifié",
+      "transactionId14": "01786622466323",
+      "paymentMethod": "natcash",
+      "amountHTG": 3000,
+      "status": "en_attente",
+      "createdAt": "2026-08-13T12:01:34.459Z"
+    },
+    {
+      "id": "dep-1786622459697",
+      "userId": "usr-guest",
+      "userEmail": "client1786622431524@test.com",
+      "userName": "client1786622431524",
+      "userPhone": "Non spécifié",
+      "transactionId14": "01786622431524",
+      "paymentMethod": "natcash",
+      "amountHTG": 2500,
+      "status": "en_attente",
+      "createdAt": "2026-08-13T12:00:59.697Z"
+    },
+    {
+      "id": "dep-1786622413578",
+      "userId": "usr-guest",
+      "userEmail": "client1786622385479@test.com",
+      "userName": "client1786622385479",
+      "userPhone": "Non spécifié",
+      "transactionId14": "01786622385479",
+      "paymentMethod": "natcash",
+      "amountHTG": 1500,
+      "status": "en_attente",
+      "createdAt": "2026-08-13T12:00:13.578Z"
+    },
+    {
+      "id": "dep-1786622254652",
+      "userId": "usr-1786622226583",
+      "userEmail": "testdep1786622219529@example.com",
+      "userName": "Test Dep User",
+      "userPhone": "50912345678",
+      "transactionId14": "01786622219529",
+      "paymentMethod": "natcash",
+      "amountHTG": 1000,
+      "status": "valide",
+      "createdAt": "2026-08-13T11:57:34.652Z",
+      "adminNote": "Approuvé par test"
+    },
+    {
+      "id": "dep-1786621847492",
+      "userId": "usr-guest",
+      "userEmail": "emmanuelselicour.2002@gmail.com",
+      "userName": "emmanuelselicour.2002",
+      "userPhone": "Non spécifié",
+      "transactionId14": "12345678901234",
+      "paymentMethod": "natcash",
+      "amountHTG": 2500,
+      "status": "en_attente",
+      "createdAt": "2026-08-13T11:50:47.492Z"
+    }
+  ],
   "orders": [],
   "tickets": [],
   "users": [
@@ -124,6 +245,26 @@
       "isEmailVerified": true,
       "walletBalanceHTG": 0,
       "isAdmin": true
+    },
+    {
+      "id": "usr-1786622226583",
+      "name": "Test Dep User",
+      "email": "testdep1786622219529@example.com",
+      "phone": "50912345678",
+      "createdAt": "2026-08-13T11:57:06.583Z",
+      "isEmailVerified": true,
+      "walletBalanceHTG": 1000,
+      "isAdmin": false
+    },
+    {
+      "id": "usr-1786622351951",
+      "name": "Client Test",
+      "email": "client1786622344911@test.com",
+      "phone": "50931001122",
+      "createdAt": "2026-08-13T11:59:11.951Z",
+      "isEmailVerified": true,
+      "walletBalanceHTG": 0,
+      "isAdmin": false
     }
   ]
 }

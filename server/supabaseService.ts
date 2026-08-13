@@ -1,3 +1,5 @@
+import 'dotenv/config';
+import crypto from 'node:crypto';
 import { createClient } from '@supabase/supabase-js';
 import { Product, ProductCategory, NatcashConfig, WalletDeposit, Order, ContactTicket, UserProfile } from '../src/types';
 import { INITIAL_PRODUCTS, INITIAL_NATCASH_CONFIG } from '../src/data/initialData';
@@ -198,6 +200,64 @@ export const fetchNatcashConfigFromSupabase = async (): Promise<NatcashConfig> =
   return INITIAL_NATCASH_CONFIG;
 };
 
+export const getUserDetailsMap = async (fallbackUsers: UserProfile[] = []) => {
+  const userDetailsMap = new Map<string, { email: string; name: string; phone: string }>();
+
+  if (Array.isArray(fallbackUsers)) {
+    fallbackUsers.forEach(u => {
+      if (u) {
+        const meta = { email: u.email || '', name: u.name || '', phone: u.phone || '' };
+        if (u.id) userDetailsMap.set(String(u.id), meta);
+        if (u.email) userDetailsMap.set(String(u.email).toLowerCase().trim(), meta);
+      }
+    });
+  }
+
+  if (supabaseAdmin) {
+    try {
+      // 1. From public.users
+      const { data: dbUsers } = await supabaseAdmin.from('users').select('*');
+      if (dbUsers) {
+        dbUsers.forEach(u => {
+          const meta = { email: u.email || '', name: u.name || '', phone: u.phone || '' };
+          if (u.id) userDetailsMap.set(String(u.id), meta);
+          if (u.email) userDetailsMap.set(String(u.email).toLowerCase().trim(), meta);
+        });
+      }
+
+      // 2. From Auth users list
+      const { data: listData } = await supabaseAdmin.auth.admin.listUsers();
+      if (listData && listData.users) {
+        listData.users.forEach((u: any) => {
+          const meta = {
+            email: u.email || '',
+            name: u.user_metadata?.name || u.email?.split('@')[0] || '',
+            phone: u.user_metadata?.phone || u.phone || ''
+          };
+          if (u.id) {
+            if (!userDetailsMap.has(String(u.id))) userDetailsMap.set(String(u.id), meta);
+          }
+          if (u.email) {
+            const em = String(u.email).toLowerCase().trim();
+            if (!userDetailsMap.has(em)) userDetailsMap.set(em, meta);
+          }
+        });
+      }
+    } catch (err) {
+      console.error('[Supabase] Error building userDetailsMap:', err);
+    }
+  }
+
+  return userDetailsMap;
+};
+
+function withTimeout<T>(promise: Promise<T>, ms: number = 1500, fallback: T): Promise<T> {
+  return Promise.race([
+    promise,
+    new Promise<T>((resolve) => setTimeout(() => resolve(fallback), ms))
+  ]);
+}
+
 export const fetchDepositsFromSupabase = async (email?: string, fallbackDeposits: WalletDeposit[] = []): Promise<WalletDeposit[]> => {
   const depsMap = new Map<string, WalletDeposit>();
 
@@ -210,49 +270,60 @@ export const fetchDepositsFromSupabase = async (email?: string, fallbackDeposits
     }
   }
 
-  // 2. Query Supabase DB
+  let userDetailsMap = new Map<string, { email: string; name: string; phone: string }>();
+
+  // 2. Query Supabase DB with 1500ms timeout max
   if (supabaseAdmin) {
     try {
-      // Build user details map
-      const userDetailsMap = new Map<string, { email: string; name: string; phone: string }>();
-      const { data: dbUsers } = await supabaseAdmin.from('users').select('*');
-      if (dbUsers) {
-        dbUsers.forEach(u => {
-          if (u.id) {
-            userDetailsMap.set(u.id, {
-              email: u.email || '',
-              name: u.name || '',
-              phone: u.phone || ''
-            });
+      await withTimeout(
+        (async () => {
+          userDetailsMap = await getUserDetailsMap();
+
+          const { data, error } = await supabaseAdmin
+            .from('wallet_deposits')
+            .select('*')
+            .order('created_at', { ascending: false });
+
+          if (data && !error) {
+            for (const d of data) {
+              const userMeta = userDetailsMap.get(String(d.user_id)) || (d.user_email ? userDetailsMap.get(String(d.user_email).toLowerCase().trim()) : undefined);
+              const txId = d.transaction_id || d.transaction_id_14 || d.transactionId14 || '';
+
+              // Find existing local fallback deposit if present by transactionId or ID
+              let existingKey: string | null = null;
+              for (const [k, v] of depsMap.entries()) {
+                if (k === String(d.id) || (txId && v.transactionId14 === txId)) {
+                  existingKey = k;
+                  break;
+                }
+              }
+              const existingLocal = existingKey ? depsMap.get(existingKey) : undefined;
+
+              const item: WalletDeposit = {
+                id: existingLocal?.id || String(d.id),
+                userId: String(d.user_id || existingLocal?.userId || ''),
+                userEmail: d.user_email || d.userEmail || existingLocal?.userEmail || userMeta?.email || '',
+                userName: d.user_name || d.userName || existingLocal?.userName || userMeta?.name || '',
+                userPhone: d.user_phone || d.userPhone || existingLocal?.userPhone || userMeta?.phone || '',
+                transactionId14: txId || existingLocal?.transactionId14 || '',
+                paymentMethod: d.payment_method || d.paymentMethod || existingLocal?.paymentMethod || 'natcash',
+                amountHTG: Number(d.amount ?? d.amount_htg ?? d.amountHTG ?? existingLocal?.amountHTG ?? 0),
+                status: d.status || existingLocal?.status || 'en_attente',
+                createdAt: d.created_at || d.createdAt || existingLocal?.createdAt || new Date().toISOString(),
+                adminNote: d.admin_note || d.adminNote || existingLocal?.adminNote,
+                screenshotUrl: d.screenshot_url || d.screenshotUrl || existingLocal?.screenshotUrl
+              };
+
+              if (existingKey && existingKey !== item.id) {
+                depsMap.delete(existingKey);
+              }
+              depsMap.set(String(item.id).trim(), item);
+            }
           }
-        });
-      }
-
-      const { data, error } = await supabaseAdmin
-        .from('wallet_deposits')
-        .select('*')
-        .order('created_at', { ascending: false });
-
-      if (data && !error) {
-        for (const d of data) {
-          const userMeta = userDetailsMap.get(String(d.user_id));
-          const item: WalletDeposit = {
-            id: String(d.id),
-            userId: String(d.user_id || ''),
-            userEmail: d.user_email || d.userEmail || userMeta?.email || '',
-            userName: d.user_name || d.userName || userMeta?.name || '',
-            userPhone: d.user_phone || d.userPhone || userMeta?.phone || '',
-            transactionId14: d.transaction_id || d.transaction_id_14 || d.transactionId14 || '',
-            paymentMethod: d.payment_method || d.paymentMethod || 'natcash',
-            amountHTG: Number(d.amount ?? d.amount_htg ?? d.amountHTG ?? 0),
-            status: d.status || 'en_attente',
-            createdAt: d.created_at || d.createdAt || new Date().toISOString(),
-            adminNote: d.admin_note || d.adminNote,
-            screenshotUrl: d.screenshot_url || d.screenshotUrl
-          };
-          depsMap.set(String(item.id).trim(), item);
-        }
-      }
+        })(),
+        1500,
+        null
+      );
     } catch (err) {
       handleSupabaseError('Erreur lecture wallet_deposits', err);
     }
@@ -261,7 +332,11 @@ export const fetchDepositsFromSupabase = async (email?: string, fallbackDeposits
   let result = Array.from(depsMap.values());
   if (email) {
     const targetEmail = String(email).toLowerCase().trim();
-    result = result.filter(d => d.userEmail.toLowerCase().trim() === targetEmail);
+    result = result.filter(d => {
+      if (d.userEmail && d.userEmail.toLowerCase().trim() === targetEmail) return true;
+      const meta = userDetailsMap.get(d.userId);
+      return meta && meta.email.toLowerCase().trim() === targetEmail;
+    });
   }
 
   return result.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
@@ -279,21 +354,19 @@ export const fetchOrdersFromSupabase = async (email?: string, fallbackOrders: Or
     }
   }
 
+  let userDetailsMap = new Map<string, { email: string; name: string; phone: string }>();
+
   // 2. Query Supabase DB
   if (supabaseAdmin) {
     try {
-      // Build user details map
-      const userDetailsMap = new Map<string, { email: string; name: string; phone: string }>();
-      const { data: dbUsers } = await supabaseAdmin.from('users').select('*');
-      if (dbUsers) {
-        dbUsers.forEach(u => {
-          if (u.id) {
-            userDetailsMap.set(u.id, {
-              email: u.email || '',
-              name: u.name || '',
-              phone: u.phone || ''
-            });
-          }
+      userDetailsMap = await getUserDetailsMap();
+
+      const prodMap = new Map<string, string>();
+      const { data: dbProducts } = await supabaseAdmin.from('products').select('*');
+      if (dbProducts) {
+        dbProducts.forEach(p => {
+          if (p.id) prodMap.set(String(p.id), p.title || p.name);
+          if (p.product_code) prodMap.set(String(p.product_code), p.title || p.name);
         });
       }
 
@@ -304,14 +377,16 @@ export const fetchOrdersFromSupabase = async (email?: string, fallbackOrders: Or
 
       if (data && !error) {
         for (const o of data) {
-          const userMeta = userDetailsMap.get(String(o.user_id));
+          const userMeta = userDetailsMap.get(String(o.user_id)) || (o.user_email ? userDetailsMap.get(String(o.user_email).toLowerCase().trim()) : undefined);
+          const pName = o.product_name || o.productName || prodMap.get(String(o.product_id)) || 'Pack Diamants Free Fire';
+
           const ordObj: Order = {
             id: String(o.id),
             userId: String(o.user_id || ''),
             userEmail: o.user_email || o.userEmail || userMeta?.email || '',
             userName: o.user_name || o.userName || userMeta?.name || '',
             productId: String(o.product_id || o.productId || ''),
-            productName: o.product_name || o.productName || 'Pack Diamants',
+            productName: pName,
             priceHTG: Number(o.amount ?? o.price_htg ?? o.priceHTG ?? 0),
             gamePlayerId: o.game_player_id || o.gamePlayerId || '',
             paymentMethod: o.payment_method || o.paymentMethod || 'wallet',
@@ -331,7 +406,11 @@ export const fetchOrdersFromSupabase = async (email?: string, fallbackOrders: Or
   let result = Array.from(ordersMap.values());
   if (email) {
     const targetEmail = String(email).toLowerCase().trim();
-    result = result.filter(o => o.userEmail.toLowerCase().trim() === targetEmail);
+    result = result.filter(o => {
+      if (o.userEmail && o.userEmail.toLowerCase().trim() === targetEmail) return true;
+      const meta = userDetailsMap.get(o.userId);
+      return meta && meta.email.toLowerCase().trim() === targetEmail;
+    });
   }
 
   return result.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
@@ -369,58 +448,34 @@ export const fetchUsersFromSupabase = async (fallbackUsers: UserProfile[] = []):
     }
   }
 
-  // 3. Query Supabase
+  // 3. Query Supabase DB 'users' Table
   if (supabaseAdmin) {
-    // 3a. Query Supabase Auth Users
     try {
-      const { data: authData, error: authErr } = await supabaseAdmin.auth.admin.listUsers();
-      if (authData && authData.users && Array.isArray(authData.users) && !authErr) {
-        for (const au of authData.users) {
-          if (au.email) {
-            const key = String(au.email).toLowerCase().trim();
-            const existing = usersMap.get(key);
-            const name = au.user_metadata?.full_name || au.user_metadata?.name || existing?.name || key.split('@')[0];
-            const phone = au.user_metadata?.phone || existing?.phone || '';
-            const createdAt = au.created_at || existing?.createdAt || new Date().toISOString();
-
-            usersMap.set(key, {
-              id: existing?.id || au.id || `usr-${Date.now()}`,
-              name,
-              email: key,
-              phone,
-              createdAt,
-              isEmailVerified: Boolean(au.email_confirmed_at || existing?.isEmailVerified || true),
-              walletBalanceHTG: Number(existing?.walletBalanceHTG ?? 0),
-              isAdmin: Boolean(existing?.isAdmin || ADMIN_EMAILS.includes(key))
-            });
+      await withTimeout(
+        (async () => {
+          const { data: dbData, error: dbErr } = await supabaseAdmin.from('users').select('*').order('created_at', { ascending: false });
+          if (dbData && Array.isArray(dbData) && !dbErr) {
+            for (const u of dbData) {
+              if (u.email) {
+                const key = String(u.email).toLowerCase().trim();
+                const existing = usersMap.get(key);
+                usersMap.set(key, {
+                  id: u.id || existing?.id || `usr-${Date.now()}`,
+                  name: u.name || existing?.name || key.split('@')[0],
+                  email: key,
+                  phone: u.phone || existing?.phone || '',
+                  createdAt: u.created_at || u.createdAt || existing?.createdAt || new Date().toISOString(),
+                  isEmailVerified: Boolean(u.is_email_verified ?? u.isEmailVerified ?? existing?.isEmailVerified ?? true),
+                  walletBalanceHTG: Number(u.wallet_balance_htg ?? u.walletBalanceHTG ?? existing?.walletBalanceHTG ?? 0),
+                  isAdmin: Boolean(u.is_admin ?? u.isAdmin ?? existing?.isAdmin ?? ADMIN_EMAILS.includes(key))
+                });
+              }
+            }
           }
-        }
-      }
-    } catch (err) {
-      handleSupabaseError('Auth list warning', err);
-    }
-
-    // 3b. Query Supabase DB 'users' Table
-    try {
-      const { data: dbData, error: dbErr } = await supabaseAdmin.from('users').select('*').order('created_at', { ascending: false });
-      if (dbData && Array.isArray(dbData) && !dbErr) {
-        for (const u of dbData) {
-          if (u.email) {
-            const key = String(u.email).toLowerCase().trim();
-            const existing = usersMap.get(key);
-            usersMap.set(key, {
-              id: u.id || existing?.id || `usr-${Date.now()}`,
-              name: u.name || existing?.name || key.split('@')[0],
-              email: key,
-              phone: u.phone || existing?.phone || '',
-              createdAt: u.created_at || u.createdAt || existing?.createdAt || new Date().toISOString(),
-              isEmailVerified: Boolean(u.is_email_verified ?? u.isEmailVerified ?? existing?.isEmailVerified ?? true),
-              walletBalanceHTG: Number(u.wallet_balance_htg ?? u.walletBalanceHTG ?? existing?.walletBalanceHTG ?? 0),
-              isAdmin: Boolean(u.is_admin ?? u.isAdmin ?? existing?.isAdmin ?? ADMIN_EMAILS.includes(key))
-            });
-          }
-        }
-      }
+        })(),
+        1500,
+        null
+      );
     } catch (err) {
       handleSupabaseError('DB users warning', err);
     }
@@ -536,48 +591,56 @@ export function toUuid(idStr?: string): string {
 }
 
 // Helper to ensure user exists in Supabase Auth & public.users table to satisfy foreign keys
-export const ensureAuthUserInSupabase = async (email?: string, name?: string, phone?: string): Promise<string> => {
+export const ensureAuthUserInSupabase = async (
+  email?: string,
+  name?: string,
+  phone?: string,
+  walletBalanceHTG?: number
+): Promise<string> => {
   if (!supabaseAdmin) return crypto.randomUUID();
   const targetEmail = (email || 'client@frayzen.com').toLowerCase().trim();
+  const userName = name || targetEmail.split('@')[0];
+  const userPhone = phone || null;
 
   try {
-    // 1. Check in Supabase Auth
-    const { data: listData } = await supabaseAdmin.auth.admin.listUsers();
-    if (listData && listData.users) {
-      const existing = listData.users.find(u => u.email && u.email.toLowerCase().trim() === targetEmail);
-      if (existing) {
-        return existing.id;
+    // 1. Check in public.users table first
+    const { data: existingPublic } = await supabaseAdmin
+      .from('users')
+      .select('id, email, name, phone, wallet_balance_htg')
+      .ilike('email', targetEmail)
+      .maybeSingle();
+
+    if (existingPublic && existingPublic.id) {
+      if (walletBalanceHTG !== undefined && existingPublic.wallet_balance_htg !== walletBalanceHTG) {
+        await supabaseAdmin
+          .from('users')
+          .update({ wallet_balance_htg: walletBalanceHTG })
+          .eq('id', existingPublic.id);
       }
+      return existingPublic.id;
     }
 
-    // 2. Create in Supabase Auth if missing
-    const { data: newUser, error } = await supabaseAdmin.auth.admin.createUser({
+    // 2. Deterministic UUID for fast user resolution
+    const authUserId = toUuid('usr-' + targetEmail);
+
+    // 3. Ensure user row in public.users table
+    const initBalance = walletBalanceHTG !== undefined ? walletBalanceHTG : 0;
+    await supabaseAdmin.from('users').upsert({
+      id: authUserId,
       email: targetEmail,
-      password: 'TempUserPass123!',
-      email_confirm: true,
-      user_metadata: { name: name || targetEmail.split('@')[0], phone: phone || '' }
-    });
+      name: userName,
+      phone: userPhone,
+      wallet_balance_htg: initBalance,
+      is_admin: false,
+      is_email_verified: true,
+      created_at: new Date().toISOString()
+    }, { onConflict: 'id' });
 
-    if (newUser && newUser.user) {
-      const authUserId = newUser.user.id;
-      // Also upsert into public.users table
-      await supabaseAdmin.from('users').upsert({
-        id: authUserId,
-        email: targetEmail,
-        name: name || targetEmail.split('@')[0],
-        phone: phone || null,
-        wallet_balance_htg: 0,
-        is_admin: false,
-        is_email_verified: true,
-        created_at: new Date().toISOString()
-      }, { onConflict: 'id' });
-      return authUserId;
-    }
+    return authUserId;
   } catch (err) {
-    // silent fallback
+    console.error('[Supabase] ensureAuthUserInSupabase error:', err);
+    return toUuid('usr-' + targetEmail);
   }
-
-  return toUuid('usr-' + targetEmail);
 };
 
 export const syncNatcashConfigToSupabase = async (config: NatcashConfig) => {
@@ -642,7 +705,7 @@ export const deleteProductFromSupabase = async (id: string) => {
 export const syncUserToSupabase = async (user: UserProfile) => {
   if (!supabaseAdmin) return;
   try {
-    const authUserId = await ensureAuthUserInSupabase(user.email, user.name, user.phone);
+    const authUserId = await ensureAuthUserInSupabase(user.email, user.name, user.phone, user.walletBalanceHTG);
     await supabaseAdmin.from('users').upsert({
       id: authUserId,
       name: user.name,
@@ -667,11 +730,13 @@ export const syncDepositToSupabase = async (deposit: WalletDeposit) => {
     const payload: any = {
       id: depUuid,
       user_id: authUserId,
+      user_email: deposit.userEmail ? deposit.userEmail.toLowerCase().trim() : null,
+      user_name: deposit.userName || null,
+      user_phone: deposit.userPhone || null,
       transaction_id: deposit.transactionId14 || deposit.id,
       amount: Number(deposit.amountHTG) || 0,
       payment_method: deposit.paymentMethod || 'natcash',
       status: deposit.status || 'en_attente',
-      user_phone: deposit.userPhone || null,
       admin_note: deposit.adminNote || null,
       screenshot_url: deposit.screenshotUrl || null,
       created_at: deposit.createdAt || new Date().toISOString()
@@ -681,7 +746,7 @@ export const syncDepositToSupabase = async (deposit: WalletDeposit) => {
     if (error) {
       console.error('[Supabase] Error syncing deposit:', error.message || error);
     } else {
-      console.log('[Supabase] Deposit synced successfully:', deposit.id);
+      console.log('[Supabase] Deposit synced successfully:', deposit.id, 'status:', deposit.status);
     }
   } catch (err) {
     handleSupabaseError('Erreur sync deposit', err);
@@ -693,7 +758,23 @@ export const syncOrderToSupabase = async (order: Order) => {
   try {
     const authUserId = await ensureAuthUserInSupabase(order.userEmail, order.userName);
     const ordUuid = toUuid(order.id);
-    const prodUuid = order.productId ? toUuid(order.productId) : null;
+
+    // Resolve real product_id from products table in Supabase
+    let realProductId: string | null = null;
+    if (order.productId) {
+      if (/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(order.productId)) {
+        realProductId = order.productId;
+      } else {
+        const { data: foundProd } = await supabaseAdmin
+          .from('products')
+          .select('id')
+          .or(`product_code.eq.${order.productId},id.eq.${order.productId}`)
+          .maybeSingle();
+        if (foundProd) {
+          realProductId = foundProd.id;
+        }
+      }
+    }
 
     // Map status for DB check constraint orders_status_check ('livre', 'en_attente', 'annule')
     let dbStatus = 'livre';
@@ -707,13 +788,12 @@ export const syncOrderToSupabase = async (order: Order) => {
     const payload: any = {
       id: ordUuid,
       user_id: authUserId,
-      product_id: prodUuid,
+      product_id: realProductId,
       game_player_id: order.gamePlayerId || 'N/A',
       amount: Number(order.priceHTG) || 0,
       payment_method: order.paymentMethod || 'wallet',
       status: dbStatus,
       pin_code_delivered: order.pinCodeDelivered || null,
-      pin_code: order.pinCodeDelivered || null,
       natcash_transaction_id: order.natcashTransactionId || null,
       created_at: order.createdAt || new Date().toISOString()
     };
