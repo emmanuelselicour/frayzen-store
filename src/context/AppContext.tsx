@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
-import { Product, NatcashConfig, WalletDeposit, Order, UserProfile, ContactTicket, AdminStats } from '../types';
+import { Product, NatcashConfig, WalletDeposit, Order, UserProfile, ContactTicket, AdminStats, PinRecord } from '../types';
 import confetti from 'canvas-confetti';
 
 export type TabType = 'accueil' | 'produits' | 'paiement' | 'wallet' | 'commandes' | 'contact' | 'profil' | 'admin' | 'redeempins' | 'faq';
@@ -17,6 +17,9 @@ interface AppContextType {
   orders: Order[];
   tickets: ContactTicket[];
   adminStats: AdminStats | null;
+  pins: PinRecord[];
+  availablePins: PinRecord[];
+  soldPins: PinRecord[];
   isDepositModalOpen: boolean;
   setIsDepositModalOpen: (open: boolean) => void;
   isVerifyModalOpen: boolean;
@@ -33,6 +36,7 @@ interface AppContextType {
   submitDeposit: (transactionId14: string, amountHTG: number, screenshotUrl?: string, paymentMethod?: 'natcash' | 'moncash') => Promise<boolean>;
   submitOrder: (productId: string, gamePlayerId: string, paymentMethod: 'wallet' | 'natcash_direct' | 'moncash_direct', natcashTxId?: string) => Promise<{ success: boolean; order?: Order }>;
   submitContactTicket: (name: string, email: string, phone: string, subject: string, message: string) => Promise<boolean>;
+  deletePin: (pinId: string) => Promise<boolean>;
   triggerConfetti: () => void;
 }
 
@@ -139,6 +143,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
     return null;
   });
+
+  const [pins, setPins] = useState<PinRecord[]>([]);
+  const [availablePins, setAvailablePins] = useState<PinRecord[]>([]);
+  const [soldPins, setSoldPins] = useState<PinRecord[]>([]);
 
   const [isDepositModalOpen, setIsDepositModalOpen] = useState(false);
   const [isVerifyModalOpen, setIsVerifyModalOpen] = useState(false);
@@ -261,12 +269,22 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         }
       }
 
-      // Always fetch admin stats and contact tickets
+      // Always fetch admin stats, contact tickets and PINs
       try {
         const resStats = await fetch('/api/admin/stats');
         if (resStats.ok) {
           const freshStats = await resStats.json();
           setAdminStats(freshStats);
+        }
+      } catch { /* silent */ }
+
+      try {
+        const resPins = await fetch('/api/pins');
+        if (resPins.ok) {
+          const pinData = await resPins.json();
+          setPins(pinData.pins || []);
+          setAvailablePins(pinData.availablePins || []);
+          setSoldPins(pinData.soldPins || []);
         }
       } catch { /* silent */ }
 
@@ -473,6 +491,25 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
   };
 
+  const deletePin = async (pinId: string): Promise<boolean> => {
+    try {
+      const res = await fetch(`/api/pins/${encodeURIComponent(pinId)}`, {
+        method: 'DELETE'
+      });
+      if (res.ok) {
+        showToast('Code PIN supprimé avec succès', 'success');
+        await refreshData();
+        return true;
+      }
+      const errData = await res.json();
+      showToast(errData.error || 'Erreur lors de la suppression du PIN', 'error');
+      return false;
+    } catch {
+      showToast('Erreur réseau lors de la suppression du PIN', 'error');
+      return false;
+    }
+  };
+
   return (
     <AppContext.Provider value={{
       activeTab,
@@ -487,6 +524,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       orders,
       tickets,
       adminStats,
+      pins,
+      availablePins,
+      soldPins,
       isDepositModalOpen,
       setIsDepositModalOpen,
       isVerifyModalOpen,
@@ -503,6 +543,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       submitDeposit,
       submitOrder,
       submitContactTicket,
+      deletePin,
       triggerConfetti
     }}>
       {children}

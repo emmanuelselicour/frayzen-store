@@ -2,6 +2,24 @@ export type ProductCategory = 'free_fire' | 'passes' | 'mobile_legends' | 'cards
 
 export type AllowedPaymentMethod = 'wallet' | 'natcash' | 'moncash';
 
+export type PinStatus = 'available' | 'sold';
+
+export interface PinRecord {
+  id: string;
+  pinCode: string;
+  productId: string;
+  productName: string;
+  packPriceHTG: number;
+  diamonds?: number;
+  status: PinStatus;
+  soldToUserId?: string;
+  soldToEmail?: string;
+  soldToUserName?: string;
+  soldOrderId?: string;
+  soldAt?: string;
+  createdAt: string;
+}
+
 export interface Product {
   id: string;
   name: string;

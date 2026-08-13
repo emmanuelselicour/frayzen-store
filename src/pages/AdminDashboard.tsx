@@ -4,7 +4,7 @@ import { Product, WalletDeposit, ContactTicket, UserProfile, AdminStats, UserDet
 import { Shield, LayoutDashboard, ShoppingBag, Wallet, Settings, MessageSquare, Plus, Trash2, Edit3, CheckCircle2, XCircle, AlertCircle, Save, Users, Award, RefreshCw, KeyRound, Lock, Eye, ArrowLeft, Flame, DollarSign, UserCheck, X, ShieldAlert, CreditCard, Calendar, Clock, Search, Filter, FileText, Check, Copy, Image as ImageIcon, Package } from 'lucide-react';
 import { ScrollReveal } from '../components/ScrollReveal';
 
-type AdminTab = 'stats' | 'produits' | 'commandes' | 'wallet' | 'config' | 'users' | 'contact';
+type AdminTab = 'stats' | 'produits' | 'pins' | 'commandes' | 'wallet' | 'config' | 'users' | 'contact';
 
 export const AdminDashboard: React.FC = () => {
   const {
@@ -14,12 +14,56 @@ export const AdminDashboard: React.FC = () => {
     orders,
     tickets,
     adminStats,
+    pins,
+    availablePins,
+    soldPins,
+    deletePin,
     refreshData,
     showToast,
     setActiveTab
   } = useApp();
 
   const [isRefreshing, setIsRefreshing] = useState(false);
+
+  // PIN Management State
+  const [pinSubTab, setPinSubTab] = useState<'available' | 'sold'>('available');
+  const [pinSearchQuery, setPinSearchQuery] = useState('');
+  const [selectedPackFilter, setSelectedPackFilter] = useState('all');
+  const [batchPinInput, setBatchPinInput] = useState<{ [productId: string]: string }>({});
+  const [batchPinLoading, setBatchPinLoading] = useState<{ [productId: string]: boolean }>({});
+
+  const handleBatchSavePinsForProduct = async (productId: string) => {
+    const prod = products.find(p => p.id === productId);
+    if (!prod) return;
+    const rawText = batchPinInput[productId] || '';
+    const lines = rawText.split(/[\n,;]+/).map(s => s.trim()).filter(Boolean);
+
+    if (lines.length === 0) {
+      showToast('Veuillez entrer au moins un code PIN.', 'error');
+      return;
+    }
+
+    setBatchPinLoading(prev => ({ ...prev, [productId]: true }));
+    try {
+      const res = await fetch(`/api/products/${productId}/pins`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ pinCodes: lines })
+      });
+      const data = await res.json();
+      if (res.ok) {
+        showToast(`Succès ! ${lines.length} PINs enregistrés et synchronisés sur Supabase.`, 'success');
+        setBatchPinInput(prev => ({ ...prev, [productId]: '' }));
+        await refreshData();
+      } else {
+        showToast(data.error || 'Erreur lors de l\'enregistrement des PINs.', 'error');
+      }
+    } catch {
+      showToast('Erreur réseau lors de l\'enregistrement des PINs.', 'error');
+    } finally {
+      setBatchPinLoading(prev => ({ ...prev, [productId]: false }));
+    }
+  };
 
   const handleManualRefresh = async () => {
     setIsRefreshing(true);
@@ -704,6 +748,30 @@ export const AdminDashboard: React.FC = () => {
               <span>Gestion Produits</span>
             </div>
             <span className="px-2 py-0.5 rounded-full bg-slate-800 text-white text-[10px] font-bold">{products.length}</span>
+          </button>
+
+          <button
+            onClick={() => setActiveAdminTab('pins')}
+            className={`w-full p-3.5 rounded-2xl text-xs font-bold flex items-center justify-between transition-all ${
+              activeAdminTab === 'pins'
+                ? 'bg-[#1E90FF] text-white shadow-md shadow-blue-500/20'
+                : 'glass-card text-slate-300 hover:bg-slate-900 hover:text-white border border-white/10'
+            }`}
+          >
+            <div className="flex items-center gap-3">
+              <KeyRound className="w-4 h-4 text-emerald-400" />
+              <span>PINs Free Fire & Vendus</span>
+            </div>
+            <div className="flex items-center gap-1">
+              <span className="px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400 text-[10px] font-bold" title="PINs disponibles">
+                {availablePins.length}
+              </span>
+              {soldPins.length > 0 && (
+                <span className="px-2 py-0.5 rounded-full bg-red-500/20 text-red-400 text-[10px] font-bold" title="PINs vendus">
+                  {soldPins.length}
+                </span>
+              )}
+            </div>
           </button>
 
           <button
@@ -1457,6 +1525,326 @@ export const AdminDashboard: React.FC = () => {
                       </button>
                     </div>
                   </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* TAB: PINS MANAGEMENT & SOLD PINS */}
+          {activeAdminTab === 'pins' && (
+            <div className="space-y-6">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-white/10 pb-4">
+                <div>
+                  <h2 className="text-xl font-extrabold text-white flex items-center gap-2">
+                    <KeyRound className="w-5 h-5 text-emerald-400" />
+                    Gestion des PINs Free Fire & PINs Vendus
+                  </h2>
+                  <p className="text-xs text-slate-400 mt-1">
+                    Voir les PINs disponibles classés par Pack de prix, ajouter des PINs en masse et consulter l'historique complet des PINs vendus.
+                  </p>
+                </div>
+
+                <div className="flex items-center gap-2 bg-slate-900/80 p-1.5 rounded-2xl border border-slate-800 shrink-0">
+                  <button
+                    onClick={() => setPinSubTab('available')}
+                    className={`px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 ${
+                      pinSubTab === 'available'
+                        ? 'bg-emerald-500 text-black shadow-md shadow-emerald-500/20'
+                        : 'text-slate-400 hover:text-white'
+                    }`}
+                  >
+                    <CheckCircle2 className="w-4 h-4" />
+                    PINs En Stock ({availablePins.length})
+                  </button>
+
+                  <button
+                    onClick={() => setPinSubTab('sold')}
+                    className={`px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 ${
+                      pinSubTab === 'sold'
+                        ? 'bg-red-500 text-white shadow-md shadow-red-500/20'
+                        : 'text-slate-400 hover:text-white'
+                    }`}
+                  >
+                    <ShoppingBag className="w-4 h-4" />
+                    PINs Vendus ({soldPins.length})
+                  </button>
+                </div>
+              </div>
+
+              {/* Metric Summary Cards */}
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                <div className="p-4 rounded-2xl bg-emerald-950/30 border border-emerald-500/30 flex items-center justify-between">
+                  <div>
+                    <p className="text-xs font-medium text-emerald-300">PINs Disponibles (En Stock)</p>
+                    <p className="text-2xl font-black text-emerald-400 mt-1">{availablePins.length}</p>
+                  </div>
+                  <div className="w-10 h-10 rounded-xl bg-emerald-500/20 flex items-center justify-center text-emerald-400">
+                    <KeyRound className="w-5 h-5" />
+                  </div>
+                </div>
+
+                <div className="p-4 rounded-2xl bg-red-950/30 border border-red-500/30 flex items-center justify-between">
+                  <div>
+                    <p className="text-xs font-medium text-red-300">PINs Ki Vann Deja (Vendus)</p>
+                    <p className="text-2xl font-black text-red-400 mt-1">{soldPins.length}</p>
+                  </div>
+                  <div className="w-10 h-10 rounded-xl bg-red-500/20 flex items-center justify-center text-red-400">
+                    <ShoppingBag className="w-5 h-5" />
+                  </div>
+                </div>
+
+                <div className="p-4 rounded-2xl bg-blue-950/30 border border-blue-500/30 flex items-center justify-between">
+                  <div>
+                    <p className="text-xs font-medium text-blue-300">Packs Configurés (Supabase)</p>
+                    <p className="text-2xl font-black text-blue-400 mt-1">{products.length}</p>
+                  </div>
+                  <div className="w-10 h-10 rounded-xl bg-blue-500/20 flex items-center justify-center text-blue-400">
+                    <Package className="w-5 h-5" />
+                  </div>
+                </div>
+              </div>
+
+              {/* SUB-TAB 1: PINs Disponibles Pa Pack de Prix */}
+              {pinSubTab === 'available' && (
+                <div className="space-y-6">
+                  <div className="bg-slate-900/60 p-4 rounded-2xl border border-white/10 flex flex-col sm:flex-row items-center justify-between gap-4">
+                    <p className="text-xs text-slate-300">
+                      💡 <strong className="text-white">PINs Classés par Pack de Prix:</strong> Collez vos codes PIN directement sous chaque pack. Ils seront synchronisés immédiatement dans la table <code className="text-amber-300 font-mono">pins</code> de Supabase et disponibles à la vente.
+                    </p>
+                    <button
+                      onClick={handleManualRefresh}
+                      className="px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-xs text-white font-bold flex items-center gap-1.5 border border-slate-700 shrink-0"
+                    >
+                      <RefreshCw className="w-3.5 h-3.5 text-emerald-400" /> Actualiser
+                    </button>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    {products.map(prod => {
+                      const prodAvailablePins = availablePins.filter(p => p.productId === prod.id);
+                      const prodSoldPins = soldPins.filter(p => p.productId === prod.id);
+                      const rawInput = batchPinInput[prod.id] || '';
+
+                      return (
+                        <div key={prod.id} className="p-5 rounded-2xl glass-card border border-white/10 space-y-4">
+                          <div className="flex items-center justify-between border-b border-white/10 pb-3">
+                            <div className="flex items-center gap-3">
+                              <img src={prod.image} alt={prod.name} className="w-10 h-10 rounded-xl object-cover bg-slate-800 border border-slate-700" />
+                              <div>
+                                <h3 className="text-sm font-extrabold text-white">{prod.name}</h3>
+                                <p className="text-xs text-amber-400 font-bold">{prod.priceHTG} HTG {prod.diamonds ? `• 💎 ${prod.diamonds} Diamants` : ''}</p>
+                              </div>
+                            </div>
+
+                            <div className="text-right">
+                              <span className="px-2.5 py-1 rounded-full bg-emerald-500/20 text-emerald-400 text-xs font-black border border-emerald-500/30">
+                                {prodAvailablePins.length} PINs en stock
+                              </span>
+                              <p className="text-[10px] text-slate-400 mt-1">{prodSoldPins.length} vendus</p>
+                            </div>
+                          </div>
+
+                          {/* Add Batch PINs input */}
+                          <div className="space-y-2">
+                            <label className="text-[11px] font-bold text-slate-300 flex items-center justify-between">
+                              <span>Ajouter / Modifier les PINs pour ce Pack:</span>
+                              <span className="text-slate-500 text-[10px]">1 PIN par ligne ou séparés par des virgules</span>
+                            </label>
+                            <textarea
+                              rows={3}
+                              placeholder="Exemple:&#10;FF-PIN-100-98321045&#10;FF-PIN-100-47201849&#10;FF-PIN-100-74920184"
+                              value={rawInput}
+                              onChange={e => setBatchPinInput(prev => ({ ...prev, [prod.id]: e.target.value }))}
+                              className="w-full p-3 rounded-xl bg-slate-900 border border-slate-700 text-xs font-mono text-emerald-300 placeholder-slate-600 focus:outline-none focus:border-emerald-500"
+                            />
+                            <button
+                              onClick={() => handleBatchSavePinsForProduct(prod.id)}
+                              disabled={batchPinLoading[prod.id]}
+                              className="w-full py-2 px-3 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-black font-extrabold text-xs flex items-center justify-center gap-2 transition-all shadow-md shadow-emerald-600/20"
+                            >
+                              <Save className="w-3.5 h-3.5" />
+                              {batchPinLoading[prod.id] ? 'Enregistrement sur Supabase...' : `Enregistrer les PINs (${prod.name})`}
+                            </button>
+                          </div>
+
+                          {/* List of currently available PINs for this pack */}
+                          {prodAvailablePins.length > 0 ? (
+                            <div className="space-y-2 pt-2">
+                              <p className="text-[11px] font-bold text-slate-400 flex items-center justify-between">
+                                <span>Liste des PINs Disponibles ({prodAvailablePins.length}):</span>
+                              </p>
+                              <div className="max-h-40 overflow-y-auto space-y-1.5 pr-1">
+                                {prodAvailablePins.map(pinObj => (
+                                  <div key={pinObj.id} className="p-2 rounded-xl bg-slate-900/80 border border-slate-800 flex items-center justify-between text-xs">
+                                    <code className="font-mono text-emerald-400 font-bold">{pinObj.pinCode}</code>
+                                    <div className="flex items-center gap-1">
+                                      <button
+                                        onClick={() => {
+                                          navigator.clipboard.writeText(pinObj.pinCode);
+                                          showToast('PIN copié !', 'success');
+                                        }}
+                                        className="p-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white text-[10px] flex items-center gap-1"
+                                        title="Copier le code PIN"
+                                      >
+                                        <Copy className="w-3 h-3 text-blue-400" />
+                                      </button>
+                                      <button
+                                        onClick={() => deletePin(pinObj.id)}
+                                        className="p-1 rounded-lg bg-red-500/20 hover:bg-red-600 text-red-400 hover:text-white transition-colors"
+                                        title="Supprimer ce PIN"
+                                      >
+                                        <Trash2 className="w-3 h-3" />
+                                      </button>
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          ) : (
+                            <div className="p-3 rounded-xl bg-slate-900/40 border border-dashed border-slate-800 text-center text-xs text-slate-500">
+                              Aucun PIN disponible en stock pour ce pack. Collez-en ci-dessus.
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
+              {/* SUB-TAB 2: PINs Ki Vann Deja (Sold PINs) */}
+              {pinSubTab === 'sold' && (
+                <div className="space-y-6">
+                  {/* Search & Filters Bar */}
+                  <div className="p-4 rounded-2xl glass-card border border-white/10 flex flex-col sm:flex-row items-center justify-between gap-4">
+                    <div className="relative w-full sm:w-80">
+                      <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-3" />
+                      <input
+                        type="text"
+                        placeholder="Rechercher par PIN, Nom client, Email, Commande..."
+                        value={pinSearchQuery}
+                        onChange={e => setPinSearchQuery(e.target.value)}
+                        className="w-full pl-10 pr-4 py-2 rounded-xl bg-slate-900 border border-slate-700 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-blue-500"
+                      />
+                    </div>
+
+                    <div className="flex items-center gap-3 w-full sm:w-auto">
+                      <Filter className="w-4 h-4 text-slate-400" />
+                      <select
+                        value={selectedPackFilter}
+                        onChange={e => setSelectedPackFilter(e.target.value)}
+                        className="px-3 py-2 rounded-xl bg-slate-900 border border-slate-700 text-xs text-white bg-slate-900"
+                      >
+                        <option value="all">Tous les Packs de Prix</option>
+                        {products.map(p => (
+                          <option key={p.id} value={p.id}>{p.name} - {p.priceHTG} HTG</option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+
+                  {/* Sold PINs List */}
+                  {(() => {
+                    const filteredSold = soldPins.filter(p => {
+                      const query = pinSearchQuery.toLowerCase().trim();
+                      const matchesPack = selectedPackFilter === 'all' || p.productId === selectedPackFilter;
+                      const matchesQuery = !query ||
+                        p.pinCode.toLowerCase().includes(query) ||
+                        (p.soldToUserName || '').toLowerCase().includes(query) ||
+                        (p.soldToEmail || '').toLowerCase().includes(query) ||
+                        (p.soldOrderId || '').toLowerCase().includes(query) ||
+                        p.productName.toLowerCase().includes(query);
+                      return matchesPack && matchesQuery;
+                    });
+
+                    if (filteredSold.length === 0) {
+                      return (
+                        <div className="p-12 text-center rounded-3xl glass-card border border-white/10 space-y-3">
+                          <ShoppingBag className="w-12 h-12 text-slate-600 mx-auto" />
+                          <h3 className="text-base font-bold text-white">Aucun PIN vendu trouvé</h3>
+                          <p className="text-xs text-slate-400">
+                            {pinSearchQuery || selectedPackFilter !== 'all' ? 'Aucun résultat ne correspond à votre recherche.' : 'Les PINs vendus lors des achats clients apparaîtront ici avec tous leurs détails.'}
+                          </p>
+                        </div>
+                      );
+                    }
+
+                    return (
+                      <div className="space-y-3">
+                        <p className="text-xs text-slate-400 font-bold">
+                          Affichage de <strong className="text-white">{filteredSold.length}</strong> PIN(s) vendu(s):
+                        </p>
+
+                        <div className="overflow-x-auto rounded-2xl border border-white/10">
+                          <table className="w-full text-left text-xs text-slate-300">
+                            <thead className="bg-slate-900/90 text-slate-400 uppercase text-[10px] tracking-wider border-b border-white/10">
+                              <tr>
+                                <th className="p-3.5">Code PIN Vendu</th>
+                                <th className="p-3.5">Pack & Prix (Quel Pack)</th>
+                                <th className="p-3.5">Acheté Par (Par kiyes)</th>
+                                <th className="p-3.5">Date & Heure (Quand)</th>
+                                <th className="p-3.5">ID Commande</th>
+                                <th className="p-3.5 text-right">Actions</th>
+                              </tr>
+                            </thead>
+                            <tbody className="divide-y divide-white/5 bg-slate-900/40">
+                              {filteredSold.map(p => (
+                                <tr key={p.id} className="hover:bg-slate-800/40 transition-colors">
+                                  <td className="p-3.5 font-mono text-emerald-400 font-extrabold flex items-center gap-2">
+                                    <span>{p.pinCode}</span>
+                                    <button
+                                      onClick={() => {
+                                        navigator.clipboard.writeText(p.pinCode);
+                                        showToast('Code PIN copié !', 'success');
+                                      }}
+                                      className="p-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-300"
+                                      title="Copier le PIN"
+                                    >
+                                      <Copy className="w-3 h-3 text-blue-400" />
+                                    </button>
+                                  </td>
+
+                                  <td className="p-3.5">
+                                    <p className="font-extrabold text-white">{p.productName}</p>
+                                    <span className="text-[10px] text-amber-400 font-bold">{p.packPriceHTG} HTG {p.diamonds ? `• 💎 ${p.diamonds}` : ''}</span>
+                                  </td>
+
+                                  <td className="p-3.5">
+                                    <p className="font-bold text-white">{p.soldToUserName || 'Client FRAYZEN'}</p>
+                                    <p className="text-[10px] text-blue-400">{p.soldToEmail || 'Email non spécifié'}</p>
+                                  </td>
+
+                                  <td className="p-3.5 text-slate-300 whitespace-nowrap">
+                                    {p.soldAt ? new Date(p.soldAt).toLocaleString('fr-FR', {
+                                      day: '2-digit',
+                                      month: 'short',
+                                      year: 'numeric',
+                                      hour: '2-digit',
+                                      minute: '2-digit'
+                                    }) : new Date(p.createdAt).toLocaleString('fr-FR')}
+                                  </td>
+
+                                  <td className="p-3.5 font-mono text-[11px] text-slate-400">
+                                    {p.soldOrderId || 'Direct'}
+                                  </td>
+
+                                  <td className="p-3.5 text-right">
+                                    <button
+                                      onClick={() => deletePin(p.id)}
+                                      className="p-1.5 rounded-lg bg-red-500/20 text-red-400 hover:bg-red-600 hover:text-white transition-colors"
+                                      title="Supprimer l'enregistrement du PIN"
+                                    >
+                                      <Trash2 className="w-3.5 h-3.5" />
+                                    </button>
+                                  </td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      </div>
+                    );
+                  })()}
                 </div>
               )}
             </div>

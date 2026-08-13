@@ -1,7 +1,7 @@
 import 'dotenv/config';
 import crypto from 'node:crypto';
 import { createClient } from '@supabase/supabase-js';
-import { Product, ProductCategory, NatcashConfig, WalletDeposit, Order, ContactTicket, UserProfile } from '../src/types';
+import { Product, ProductCategory, NatcashConfig, WalletDeposit, Order, ContactTicket, UserProfile, PinRecord } from '../src/types';
 import { INITIAL_PRODUCTS, INITIAL_NATCASH_CONFIG } from '../src/data/initialData';
 
 // ============================================================================
@@ -679,7 +679,8 @@ export const syncProductToSupabase = async (product: Product) => {
       image_url: product.image,
       category: product.category || 'free_fire',
       stock: Math.max(Number(product.stock) || 0, pinCodesArr.length),
-      is_popular: Boolean(product.isPopular)
+      is_popular: Boolean(product.isPopular),
+      pin_codes: pinCodesArr
     };
 
     const { error } = await supabaseAdmin.from('products').upsert(payload, { onConflict: 'id' });
@@ -835,5 +836,118 @@ export const syncTicketToSupabase = async (ticket: ContactTicket) => {
     }
   } catch (err) {
     handleSupabaseError('Erreur sync contacts', err);
+  }
+};
+
+export const fetchPinsFromSupabase = async (fallbackPins: PinRecord[] = []): Promise<PinRecord[]> => {
+  const pinsMap = new Map<string, PinRecord>();
+
+  if (Array.isArray(fallbackPins)) {
+    fallbackPins.forEach(p => {
+      if (p && p.id) {
+        pinsMap.set(p.id, p);
+      }
+    });
+  }
+
+  if (supabaseAdmin) {
+    try {
+      const { data, error } = await supabaseAdmin.from('pins').select('*');
+      if (data && !error) {
+        data.forEach((p: any) => {
+          const pinObj: PinRecord = {
+            id: p.id || `pin-${Date.now()}`,
+            pinCode: String(p.pin_code || p.pinCode || p.code || '').trim(),
+            productId: String(p.product_id || p.productId || '').trim(),
+            productName: String(p.product_name || p.productName || 'Pack Diamants').trim(),
+            packPriceHTG: Number(p.pack_price_htg || p.price_htg || p.packPriceHTG || 0),
+            diamonds: p.diamonds ? Number(p.diamonds) : undefined,
+            status: p.status === 'sold' ? 'sold' : 'available',
+            soldToUserId: p.sold_to_user_id || p.soldToUserId || undefined,
+            soldToEmail: p.sold_to_email || p.soldToEmail || undefined,
+            soldToUserName: p.sold_to_user_name || p.soldToUserName || undefined,
+            soldOrderId: p.sold_order_id || p.soldOrderId || undefined,
+            soldAt: p.sold_at || p.soldAt || undefined,
+            createdAt: p.created_at || p.createdAt || new Date().toISOString()
+          };
+          if (pinObj.pinCode) {
+            pinsMap.set(pinObj.id, pinObj);
+          }
+        });
+      }
+    } catch (err) {
+      handleSupabaseError('Erreur lecture table pins', err);
+    }
+  }
+
+  return Array.from(pinsMap.values());
+};
+
+export const syncPinToSupabase = async (pin: PinRecord) => {
+  if (!supabaseAdmin) return;
+  try {
+    const payload = {
+      id: pin.id,
+      pin_code: pin.pinCode,
+      product_id: pin.productId,
+      product_name: pin.productName,
+      pack_price_htg: Number(pin.packPriceHTG) || 0,
+      diamonds: pin.diamonds ? Number(pin.diamonds) : null,
+      status: pin.status || 'available',
+      sold_to_user_id: pin.soldToUserId || null,
+      sold_to_email: pin.soldToEmail ? pin.soldToEmail.toLowerCase().trim() : null,
+      sold_to_user_name: pin.soldToUserName || null,
+      sold_order_id: pin.soldOrderId || null,
+      sold_at: pin.soldAt || null,
+      created_at: pin.createdAt || new Date().toISOString()
+    };
+
+    const { error } = await supabaseAdmin.from('pins').upsert(payload, { onConflict: 'id' });
+    if (error) {
+      console.error('[Supabase] Error syncing pin:', error.message || error);
+    } else {
+      console.log('[Supabase] Pin synced successfully:', pin.pinCode, 'status:', pin.status);
+    }
+  } catch (err) {
+    handleSupabaseError('Erreur sync pin', err);
+  }
+};
+
+export const syncAllPinsToSupabase = async (pinsArr: PinRecord[]) => {
+  if (!supabaseAdmin || !Array.isArray(pinsArr) || pinsArr.length === 0) return;
+  try {
+    const payloads = pinsArr.map(pin => ({
+      id: pin.id,
+      pin_code: pin.pinCode,
+      product_id: pin.productId,
+      product_name: pin.productName,
+      pack_price_htg: Number(pin.packPriceHTG) || 0,
+      diamonds: pin.diamonds ? Number(pin.diamonds) : null,
+      status: pin.status || 'available',
+      sold_to_user_id: pin.soldToUserId || null,
+      sold_to_email: pin.soldToEmail ? pin.soldToEmail.toLowerCase().trim() : null,
+      sold_to_user_name: pin.soldToUserName || null,
+      sold_order_id: pin.soldOrderId || null,
+      sold_at: pin.soldAt || null,
+      created_at: pin.createdAt || new Date().toISOString()
+    }));
+
+    const { error } = await supabaseAdmin.from('pins').upsert(payloads, { onConflict: 'id' });
+    if (error) {
+      console.error('[Supabase] Error syncing batch pins:', error.message || error);
+    } else {
+      console.log(`[Supabase] Batch of ${pinsArr.length} PINs synced successfully.`);
+    }
+  } catch (err) {
+    handleSupabaseError('Erreur sync batch pins', err);
+  }
+};
+
+export const deletePinFromSupabase = async (pinId: string) => {
+  if (!supabaseAdmin) return;
+  try {
+    await supabaseAdmin.from('pins').delete().eq('id', pinId);
+  } catch (err) {
+    handleSupabaseError('Erreur suppression pin', err);
   }
 };
