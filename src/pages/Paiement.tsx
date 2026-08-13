@@ -100,8 +100,6 @@ export const Paiement: React.FC = () => {
     if (res.success) {
       if (res.order && res.order.pinCodeDelivered) {
         setOrderResultPin(res.order.pinCodeDelivered);
-      } else if (paymentMethod === 'wallet') {
-        setOrderResultPin('FF-PIN-RECUPERATION-AUTOMATIQUE');
       }
     }
   };

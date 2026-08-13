@@ -299,6 +299,14 @@ export const fetchDepositsFromSupabase = async (email?: string, fallbackDeposits
               }
               const existingLocal = existingKey ? depsMap.get(existingKey) : undefined;
 
+              // Determine the true status: preference to DB status, unless DB status is 'en_attente' while local was already updated
+              const dbStatus = d.status;
+              const localStatus = existingLocal?.status;
+              let finalStatus = dbStatus || localStatus || 'en_attente';
+              if (dbStatus === 'en_attente' && localStatus && localStatus !== 'en_attente') {
+                finalStatus = localStatus;
+              }
+
               const item: WalletDeposit = {
                 id: existingLocal?.id || String(d.id),
                 userId: String(d.user_id || existingLocal?.userId || ''),
@@ -308,9 +316,9 @@ export const fetchDepositsFromSupabase = async (email?: string, fallbackDeposits
                 transactionId14: txId || existingLocal?.transactionId14 || '',
                 paymentMethod: d.payment_method || d.paymentMethod || existingLocal?.paymentMethod || 'natcash',
                 amountHTG: Number(d.amount ?? d.amount_htg ?? d.amountHTG ?? existingLocal?.amountHTG ?? 0),
-                status: d.status || existingLocal?.status || 'en_attente',
+                status: finalStatus as DepositStatus,
                 createdAt: d.created_at || d.createdAt || existingLocal?.createdAt || new Date().toISOString(),
-                adminNote: d.admin_note || d.adminNote || existingLocal?.adminNote,
+                adminNote: d.admin_note !== undefined ? d.admin_note : existingLocal?.adminNote,
                 screenshotUrl: d.screenshot_url || d.screenshotUrl || existingLocal?.screenshotUrl
               };
 
@@ -747,24 +755,27 @@ export const syncDepositToSupabase = async (deposit: WalletDeposit) => {
     const { error } = await supabaseAdmin.from('wallet_deposits').upsert(payload, { onConflict: 'id' });
     if (error) {
       console.warn('[Supabase] Primary deposit upsert notice:', error.message || error);
-      // Fallback with standard core fields
-      const fallbackPayload = {
-        id: depUuid,
-        user_id: authUserId,
-        transaction_id: deposit.transactionId14 || deposit.id,
-        amount: Number(deposit.amountHTG) || 0,
-        payment_method: deposit.paymentMethod || 'natcash',
-        status: deposit.status || 'en_attente',
-        created_at: deposit.createdAt || new Date().toISOString()
-      };
-      const { error: err2 } = await supabaseAdmin.from('wallet_deposits').upsert(fallbackPayload, { onConflict: 'id' });
-      if (err2) {
-        console.error('[Supabase] Error syncing deposit fallback:', err2.message || err2);
-      } else {
-        console.log('[Supabase] Deposit synced via core fallback:', deposit.id, 'status:', deposit.status);
-      }
     } else {
-      console.log('[Supabase] Deposit synced successfully:', deposit.id, 'status:', deposit.status);
+      console.log('[Supabase] Deposit upserted successfully:', deposit.id, 'status:', deposit.status);
+    }
+
+    // Secondary update by transaction_id to guarantee match regardless of UUID scheme
+    if (deposit.transactionId14) {
+      const txUpdatePayload: any = {
+        status: deposit.status,
+        amount: Number(deposit.amountHTG) || 0
+      };
+      if (deposit.adminNote !== undefined) txUpdatePayload.admin_note = deposit.adminNote;
+      const { error: txErr } = await supabaseAdmin
+        .from('wallet_deposits')
+        .update(txUpdatePayload)
+        .eq('transaction_id', deposit.transactionId14);
+
+      if (txErr) {
+        console.warn('[Supabase] Deposit update by transaction_id notice:', txErr.message || txErr);
+      } else {
+        console.log('[Supabase] Deposit updated by transaction_id:', deposit.transactionId14, 'status:', deposit.status);
+      }
     }
   } catch (err) {
     handleSupabaseError('Erreur sync deposit', err);

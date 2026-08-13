@@ -11,10 +11,7 @@
       "description": "Top Up par ID Free Fire - Livré à l'instant",
       "stock": 100,
       "isPopular": false,
-      "pinCodes": [
-        "FF-PIN-TEST-112233",
-        "FF-PIN-TEST-445566"
-      ]
+      "pinCodes": []
     },
     {
       "id": "ff-200",
@@ -266,5 +263,6 @@
       "walletBalanceHTG": 0,
       "isAdmin": false
     }
-  ]
+  ],
+  "pins": []
 }

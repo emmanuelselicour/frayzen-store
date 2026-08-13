@@ -771,7 +771,7 @@ app.put('/api/wallet/deposits/:id', async (req, res) => {
         users.push(user);
       }
 
-      syncUserToSupabase(user).catch(err => console.error('[Supabase Async Error]', err));
+      await syncUserToSupabase(user);
     } else {
       console.warn(`[Deposit Update] User not found for deposit email '${deposit.userEmail}' / ID '${deposit.userId}'`);
     }
@@ -784,7 +784,7 @@ app.put('/api/wallet/deposits/:id', async (req, res) => {
     }
 
     saveDataStore();
-    syncDepositToSupabase(deposit).catch(err => console.error('[Supabase Async Error]', err));
+    await syncDepositToSupabase(deposit);
 
     res.json({
       message: `Statut du dépôt mis à jour en '${status}'.`,
@@ -1143,12 +1143,12 @@ app.put('/api/orders/:id', async (req, res) => {
         pins.unshift(soldPinRecord);
         await syncPinToSupabase(soldPinRecord);
       } else {
-        const randDigits = Math.floor(10000000 + Math.random() * 90000000);
-        const timeStamp = Date.now().toString().slice(-4);
-        pinDelivered = `FF-PIN-${product?.diamonds || 100}-${randDigits}${timeStamp}`;
+        console.warn(`[Stock] Aucun PIN disponible pour le pack ${product?.name} lors de la validation de la commande ${order.id}.`);
       }
 
-      order.pinCodeDelivered = pinDelivered;
+      if (pinDelivered) {
+        order.pinCodeDelivered = pinDelivered;
+      }
     }
 
     const memIdx = orders.findIndex(o => o.id === id);

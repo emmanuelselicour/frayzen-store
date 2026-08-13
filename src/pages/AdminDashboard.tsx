@@ -1652,7 +1652,7 @@ export const AdminDashboard: React.FC = () => {
                             </label>
                             <textarea
                               rows={3}
-                              placeholder="Exemple:&#10;FF-PIN-100-98321045&#10;FF-PIN-100-47201849&#10;FF-PIN-100-74920184"
+                              placeholder="Collez vos kòd PIN zèklè yo isit la (1 PIN pa liyn)..."
                               value={rawInput}
                               onChange={e => setBatchPinInput(prev => ({ ...prev, [prod.id]: e.target.value }))}
                               className="w-full p-3 rounded-xl bg-slate-900 border border-slate-700 text-xs font-mono text-emerald-300 placeholder-slate-600 focus:outline-none focus:border-emerald-500"
@@ -3142,7 +3142,7 @@ export const AdminDashboard: React.FC = () => {
               rows={8}
               value={pinsTextarea}
               onChange={e => setPinsTextarea(e.target.value)}
-              placeholder="FF-PIN-11223344&#10;FF-PIN-55667788&#10;FF-PIN-99001122"
+              placeholder="Entrez les codes PIN (un par ligne)..."
               className="w-full p-3.5 rounded-2xl glass-input text-xs font-mono text-amber-300 placeholder-slate-600 border-amber-500/30"
             />
 
@@ -3524,7 +3524,7 @@ export const AdminDashboard: React.FC = () => {
                 </label>
                 <input
                   type="text"
-                  placeholder="Ex: FF-PIN-100-84920491 (Laissez vide pour auto-générer)"
+                  placeholder="Entrez le code PIN manuellement (Optionnel)..."
                   value={modalOrderPinCode}
                   onChange={(e) => setModalOrderPinCode(e.target.value)}
                   className="w-full px-3.5 py-2.5 rounded-xl bg-slate-950 border border-slate-700 text-white placeholder-slate-500 text-xs font-mono font-bold focus:outline-none focus:border-[#1E90FF]"
