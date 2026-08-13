@@ -33,6 +33,12 @@ export const AdminDashboard: React.FC = () => {
   const [batchPinLoading, setBatchPinLoading] = useState<{ [productId: string]: boolean }>({});
 
   const handleBatchSavePinsForProduct = async (productId: string) => {
+    if (!isPinSectionUnlocked) {
+      setIsPinModalOpen(true);
+      showToast('Veuillez entrer le mot de passe de sécurité pour enregistrer les PINs.', 'error');
+      return;
+    }
+
     const prod = products.find(p => p.id === productId);
     if (!prod) return;
     const rawText = batchPinInput[productId] || '';
@@ -52,7 +58,7 @@ export const AdminDashboard: React.FC = () => {
       });
       const data = await res.json();
       if (res.ok) {
-        showToast(`Succès ! ${lines.length} PINs enregistrés et synchronisés sur Supabase.`, 'success');
+        showToast(`Succès ! ${lines.length} PIN(s) enregistré(s) avec succès.`, 'success');
         setBatchPinInput(prev => ({ ...prev, [productId]: '' }));
         await refreshData();
       } else {
@@ -514,6 +520,11 @@ export const AdminDashboard: React.FC = () => {
 
   // Save PIN Codes for a Product Pack
   const handleSaveProductPins = async (productId: string) => {
+    if (!isPinSectionUnlocked) {
+      setIsPinModalOpen(true);
+      showToast('Veuillez entrer le mot de passe de sécurité pour enregistrer les PINs.', 'error');
+      return;
+    }
     const pinArray = pinsTextarea.split('\n').map(p => p.trim()).filter(Boolean);
     try {
       const res = await fetch(`/api/products/${productId}/pins`, {
@@ -522,7 +533,7 @@ export const AdminDashboard: React.FC = () => {
         body: JSON.stringify({ pinCodes: pinArray })
       });
       if (res.ok) {
-        showToast(`Codes PIN mis à jour (${pinArray.length} PINs enregistrés) !`, 'success');
+        showToast(`Codes PIN mis à jour avec succès (${pinArray.length} PIN(s) enregistré(s)) !`, 'success');
         setEditingPinsProduct(null);
         await refreshData();
       } else {
@@ -1595,7 +1606,7 @@ export const AdminDashboard: React.FC = () => {
 
                 <div className="p-4 rounded-2xl bg-blue-950/30 border border-blue-500/30 flex items-center justify-between">
                   <div>
-                    <p className="text-xs font-medium text-blue-300">Packs Configurés (Supabase)</p>
+                    <p className="text-xs font-medium text-blue-300">Packs Configurés</p>
                     <p className="text-2xl font-black text-blue-400 mt-1">{products.length}</p>
                   </div>
                   <div className="w-10 h-10 rounded-xl bg-blue-500/20 flex items-center justify-center text-blue-400">
@@ -1609,14 +1620,24 @@ export const AdminDashboard: React.FC = () => {
                 <div className="space-y-6">
                   <div className="bg-slate-900/60 p-4 rounded-2xl border border-white/10 flex flex-col sm:flex-row items-center justify-between gap-4">
                     <p className="text-xs text-slate-300">
-                      💡 <strong className="text-white">PINs Classés par Pack de Prix:</strong> Collez vos codes PIN directement sous chaque pack. Ils seront synchronisés immédiatement dans la table <code className="text-amber-300 font-mono">pins</code> de Supabase et disponibles à la vente.
+                      💡 <strong className="text-white">PINs Classés par Pack de Prix:</strong> Collez vos codes PIN directement sous chaque pack. Ils seront enregistrés immédiatement et disponibles à la vente.
                     </p>
-                    <button
-                      onClick={handleManualRefresh}
-                      className="px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-xs text-white font-bold flex items-center gap-1.5 border border-slate-700 shrink-0"
-                    >
-                      <RefreshCw className="w-3.5 h-3.5 text-emerald-400" /> Actualiser
-                    </button>
+                    <div className="flex items-center gap-2 shrink-0">
+                      {!isPinSectionUnlocked && (
+                        <button
+                          onClick={() => setIsPinModalOpen(true)}
+                          className="px-3 py-1.5 rounded-xl bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 font-bold text-xs flex items-center gap-1.5 border border-amber-500/30"
+                        >
+                          <Lock className="w-3.5 h-3.5 text-amber-400" /> Déverrouiller PINs
+                        </button>
+                      )}
+                      <button
+                        onClick={handleManualRefresh}
+                        className="px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-xs text-white font-bold flex items-center gap-1.5 border border-slate-700"
+                      >
+                        <RefreshCw className="w-3.5 h-3.5 text-emerald-400" /> Actualiser
+                      </button>
+                    </div>
                   </div>
 
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -1663,7 +1684,7 @@ export const AdminDashboard: React.FC = () => {
                               className="w-full py-2 px-3 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-black font-extrabold text-xs flex items-center justify-center gap-2 transition-all shadow-md shadow-emerald-600/20"
                             >
                               <Save className="w-3.5 h-3.5" />
-                              {batchPinLoading[prod.id] ? 'Enregistrement sur Supabase...' : `Enregistrer les PINs (${prod.name})`}
+                              {batchPinLoading[prod.id] ? 'Enregistrement...' : `Enregistrer les PINs (${prod.name})`}
                             </button>
                           </div>
 
