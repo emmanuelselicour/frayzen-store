@@ -731,21 +731,38 @@ export const syncDepositToSupabase = async (deposit: WalletDeposit) => {
     const payload: any = {
       id: depUuid,
       user_id: authUserId,
-      user_email: deposit.userEmail ? deposit.userEmail.toLowerCase().trim() : null,
-      user_name: deposit.userName || null,
-      user_phone: deposit.userPhone || null,
       transaction_id: deposit.transactionId14 || deposit.id,
       amount: Number(deposit.amountHTG) || 0,
       payment_method: deposit.paymentMethod || 'natcash',
       status: deposit.status || 'en_attente',
-      admin_note: deposit.adminNote || null,
-      screenshot_url: deposit.screenshotUrl || null,
       created_at: deposit.createdAt || new Date().toISOString()
     };
 
+    if (deposit.userEmail) payload.user_email = deposit.userEmail.toLowerCase().trim();
+    if (deposit.userName) payload.user_name = deposit.userName;
+    if (deposit.userPhone) payload.user_phone = deposit.userPhone;
+    if (deposit.adminNote) payload.admin_note = deposit.adminNote;
+    if (deposit.screenshotUrl) payload.screenshot_url = deposit.screenshotUrl;
+
     const { error } = await supabaseAdmin.from('wallet_deposits').upsert(payload, { onConflict: 'id' });
     if (error) {
-      console.error('[Supabase] Error syncing deposit:', error.message || error);
+      console.warn('[Supabase] Primary deposit upsert notice:', error.message || error);
+      // Fallback with standard core fields
+      const fallbackPayload = {
+        id: depUuid,
+        user_id: authUserId,
+        transaction_id: deposit.transactionId14 || deposit.id,
+        amount: Number(deposit.amountHTG) || 0,
+        payment_method: deposit.paymentMethod || 'natcash',
+        status: deposit.status || 'en_attente',
+        created_at: deposit.createdAt || new Date().toISOString()
+      };
+      const { error: err2 } = await supabaseAdmin.from('wallet_deposits').upsert(fallbackPayload, { onConflict: 'id' });
+      if (err2) {
+        console.error('[Supabase] Error syncing deposit fallback:', err2.message || err2);
+      } else {
+        console.log('[Supabase] Deposit synced via core fallback:', deposit.id, 'status:', deposit.status);
+      }
     } else {
       console.log('[Supabase] Deposit synced successfully:', deposit.id, 'status:', deposit.status);
     }

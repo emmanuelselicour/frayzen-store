@@ -23,7 +23,8 @@ import {
   syncAllPinsToSupabase,
   deletePinFromSupabase,
   signUpWithSupabaseAuth,
-  isSupabaseServerConfigured
+  isSupabaseServerConfigured,
+  toUuid
 } from './server/supabaseService';
 
 const app = express();
@@ -899,8 +900,24 @@ app.post('/api/orders', async (req, res) => {
 
       const newOrderId = `ord-${Date.now()}-${Math.floor(100 + Math.random() * 900)}`;
 
-      // Find available PIN record
-      let soldPinRecord: PinRecord | undefined = pins.find(p => p.productId === product.id && p.status === 'available');
+      // Fetch fresh PINs from Supabase to ensure accurate real stock
+      const dbPins = await fetchPinsFromSupabase(pins);
+      for (const dp of dbPins) {
+        if (!pins.some(p => p.id === dp.id)) {
+          pins.push(dp);
+        }
+      }
+
+      // Find available real PIN record matching product ID, pack price, or diamonds
+      let soldPinRecord: PinRecord | undefined = pins.find(p => 
+        p.status === 'available' && (
+          p.productId === product.id ||
+          (p.packPriceHTG === product.priceHTG && p.diamonds === product.diamonds) ||
+          p.packPriceHTG === product.priceHTG ||
+          (Array.isArray(product.pinCodes) && product.pinCodes.includes(p.pinCode))
+        )
+      );
+
       let pinDelivered: string | undefined = undefined;
 
       if (soldPinRecord) {
@@ -916,10 +933,10 @@ app.post('/api/orders', async (req, res) => {
           product.pinCodes = product.pinCodes.filter(c => c !== pinDelivered);
         }
         if (product.stock > 0) product.stock -= 1;
-      } else {
-        const randDigits = Math.floor(10000000 + Math.random() * 90000000);
-        const timeStamp = Date.now().toString().slice(-4);
-        pinDelivered = `FF-PIN-${product.diamonds || 100}-${randDigits}${timeStamp}`;
+      } else if (Array.isArray(product.pinCodes) && product.pinCodes.length > 0) {
+        // Fallback: Grab first available PIN from product's pinCodes array
+        pinDelivered = String(product.pinCodes[0]).trim();
+        product.pinCodes = product.pinCodes.slice(1);
 
         soldPinRecord = {
           id: `pin-${Date.now()}-${Math.floor(100 + Math.random() * 900)}`,
@@ -938,6 +955,11 @@ app.post('/api/orders', async (req, res) => {
         };
         pins.unshift(soldPinRecord);
         if (product.stock > 0) product.stock -= 1;
+      } else {
+        // No PIN available in stock - reject order safely
+        return res.status(400).json({
+          error: `Rupture de stock : Il n'y a actuellement aucun code PIN disponible en stock pour le pack "${product.name}" (${product.priceHTG} HTG). L'administrateur a été notifié pour réapprovisionner le stock.`
+        });
       }
 
       const newOrder: Order = {
@@ -1070,16 +1092,62 @@ app.put('/api/orders/:id', async (req, res) => {
     } else if (status === 'reussi' && !order.pinCodeDelivered) {
       const allProducts = await fetchProductsFromSupabase(products);
       const product = allProducts.find(p => p.id === order.productId);
-      let pinDelivered = undefined;
-      if (product && product.pinCodes && product.pinCodes.length > 0) {
-        pinDelivered = product.pinCodes.shift();
+      
+      let soldPinRecord: PinRecord | undefined = pins.find(p => 
+        p.status === 'available' && (
+          (product && p.productId === product.id) ||
+          (product && p.packPriceHTG === product.priceHTG && p.diamonds === product.diamonds) ||
+          (product && p.packPriceHTG === product.priceHTG) ||
+          (product && Array.isArray(product.pinCodes) && product.pinCodes.includes(p.pinCode))
+        )
+      );
+
+      let pinDelivered: string | undefined = undefined;
+
+      if (soldPinRecord) {
+        soldPinRecord.status = 'sold';
+        soldPinRecord.soldToUserId = order.userId;
+        soldPinRecord.soldToEmail = order.userEmail;
+        soldPinRecord.soldToUserName = order.userName;
+        soldPinRecord.soldOrderId = order.id;
+        soldPinRecord.soldAt = new Date().toISOString();
+        pinDelivered = soldPinRecord.pinCode;
+
+        if (product && Array.isArray(product.pinCodes)) {
+          product.pinCodes = product.pinCodes.filter(c => c !== pinDelivered);
+          if (product.stock > 0) product.stock -= 1;
+          await syncProductToSupabase(product);
+        }
+        await syncPinToSupabase(soldPinRecord);
+      } else if (product && Array.isArray(product.pinCodes) && product.pinCodes.length > 0) {
+        pinDelivered = String(product.pinCodes[0]).trim();
+        product.pinCodes = product.pinCodes.slice(1);
+        if (product.stock > 0) product.stock -= 1;
         await syncProductToSupabase(product);
-      }
-      if (!pinDelivered) {
+
+        soldPinRecord = {
+          id: `pin-${Date.now()}-${Math.floor(100 + Math.random() * 900)}`,
+          pinCode: pinDelivered,
+          productId: product.id,
+          productName: product.name,
+          packPriceHTG: product.priceHTG,
+          diamonds: product.diamonds,
+          status: 'sold',
+          soldToUserId: order.userId,
+          soldToEmail: order.userEmail,
+          soldToUserName: order.userName,
+          soldOrderId: order.id,
+          soldAt: new Date().toISOString(),
+          createdAt: new Date().toISOString()
+        };
+        pins.unshift(soldPinRecord);
+        await syncPinToSupabase(soldPinRecord);
+      } else {
         const randDigits = Math.floor(10000000 + Math.random() * 90000000);
         const timeStamp = Date.now().toString().slice(-4);
         pinDelivered = `FF-PIN-${product?.diamonds || 100}-${randDigits}${timeStamp}`;
       }
+
       order.pinCodeDelivered = pinDelivered;
     }
 
