@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useApp } from '../context/AppContext';
 import { Product, WalletDeposit, ContactTicket, UserProfile, AdminStats, UserDetailedMetrics, DepositStatus, Order } from '../types';
-import { Shield, LayoutDashboard, ShoppingBag, Wallet, Settings, MessageSquare, Plus, Trash2, Edit3, CheckCircle2, XCircle, AlertCircle, Save, Users, Award, RefreshCw, KeyRound, Lock, Eye, ArrowLeft, Flame, DollarSign, UserCheck, X, ShieldAlert, CreditCard, Calendar, Clock, Search, Filter, FileText, Check, Copy, Image as ImageIcon, Package } from 'lucide-react';
+import { Shield, LayoutDashboard, ShoppingBag, Wallet, Settings, MessageSquare, Plus, Trash2, Edit3, CheckCircle2, XCircle, AlertCircle, Save, Users, Award, RefreshCw, KeyRound, Lock, Eye, EyeOff, ArrowLeft, Flame, DollarSign, UserCheck, X, ShieldAlert, CreditCard, Calendar, Clock, Search, Filter, FileText, Check, Copy, Image as ImageIcon, Package, User, ShieldCheck } from 'lucide-react';
 import { ScrollReveal } from '../components/ScrollReveal';
 
 type AdminTab = 'stats' | 'produits' | 'pins' | 'commandes' | 'wallet' | 'config' | 'users' | 'contact';
@@ -105,7 +105,14 @@ export const AdminDashboard: React.FC = () => {
   const [natEmail, setNatEmail] = useState(natcashConfig.supportEmail);
   const [natInstructions, setNatInstructions] = useState(natcashConfig.instructions);
   const [adminPinConfig, setAdminPinConfig] = useState(natcashConfig.adminPin || '123456');
+  const [adminEmailConfig, setAdminEmailConfig] = useState(natcashConfig.adminEmail || 'Junioradrien284@gmail.com');
+  const [adminPasswordConfig, setAdminPasswordConfig] = useState(natcashConfig.adminPassword || '00009999');
+  const [showAdminPassword, setShowAdminPassword] = useState(false);
   const [isSavingConfig, setIsSavingConfig] = useState(false);
+
+  // Users Tab Filters & Actions
+  const [userRoleFilter, setUserRoleFilter] = useState<'all' | 'client' | 'admin' | 'verified' | 'unverified'>('all');
+  const [isVerifyingUserEmail, setIsVerifyingUserEmail] = useState<string | null>(null);
 
   // Products Category View: 'overview' (Single master card) or 'free_fire' (All packs)
   const [prodCategoryView, setProdCategoryView] = useState<'overview' | 'free_fire'>('overview');
@@ -271,6 +278,8 @@ export const AdminDashboard: React.FC = () => {
     setNatEmail(natcashConfig.supportEmail);
     setNatInstructions(natcashConfig.instructions);
     setAdminPinConfig(natcashConfig.adminPin || '123456');
+    setAdminEmailConfig(natcashConfig.adminEmail || 'Junioradrien284@gmail.com');
+    setAdminPasswordConfig(natcashConfig.adminPassword || '00009999');
   }, [natcashConfig]);
 
   const fetchUsersDetailed = async () => {
@@ -292,6 +301,31 @@ export const AdminDashboard: React.FC = () => {
       }
     } catch {
       // silent
+    }
+  };
+
+  const handleManualVerifyEmail = async (email: string) => {
+    setIsVerifyingUserEmail(email);
+    try {
+      const res = await fetch('/api/auth/verify-email', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email })
+      });
+      const data = await res.json();
+      if (res.ok) {
+        showToast(`Email de ${email} vérifié et activé avec succès !`, 'success');
+        await fetchUsersDetailed();
+        if (selectedUserModal && selectedUserModal.email.toLowerCase() === email.toLowerCase()) {
+          setSelectedUserModal(prev => prev ? { ...prev, isEmailVerified: true } : null);
+        }
+      } else {
+        showToast(data.error || 'Erreur lors de la validation.', 'error');
+      }
+    } catch {
+      showToast('Erreur de connexion.', 'error');
+    } finally {
+      setIsVerifyingUserEmail(null);
     }
   };
 
@@ -376,11 +410,13 @@ export const AdminDashboard: React.FC = () => {
           instructions: natInstructions,
           supportPhone: natPhone,
           supportEmail: natEmail,
-          adminPin: adminPinConfig
+          adminPin: adminPinConfig,
+          adminEmail: adminEmailConfig,
+          adminPassword: adminPasswordConfig
         })
       });
       if (res.ok) {
-        showToast('Action validée ! Configuration et Code PIN Admin enregistrés.', 'success');
+        showToast('Action validée ! Configuration, identifiants et Code PIN Admin enregistrés.', 'success');
         setIsConfigPinModalOpen(false);
         setConfigPinInput('');
         await refreshData();
@@ -2622,29 +2658,84 @@ export const AdminDashboard: React.FC = () => {
             </div>
           )}
 
-          {/* TAB 4: CONFIGURATION NATCASH, MONCASH & PIN ADMIN */}
+          {/* TAB 4: CONFIGURATION NATCASH, MONCASH & IDENTIFIANTS ADMIN */}
           {activeAdminTab === 'config' && (
             <form onSubmit={handleSaveConfig} className="space-y-6 text-white">
-              <h2 className="text-xl font-black text-white pb-3 border-b border-white/10">Configuration Paiement & Code PIN Admin</h2>
+              <h2 className="text-xl font-black text-white pb-3 border-b border-white/10">Configuration Paiement & Accès Administrateur</h2>
 
-              {/* CODE PIN ADMIN MODIFIABLE */}
-              <div className="p-5 rounded-2xl bg-amber-500/10 border border-amber-500/30 space-y-3">
-                <div className="flex items-center gap-2 text-amber-400 font-extrabold text-sm">
-                  <KeyRound className="w-5 h-5" />
-                  Code PIN Administrateur (6 chiffres)
+              {/* IDENTIFIANTS & ACCES ADMINISTRATEUR PRINCIPAL */}
+              <div className="p-5 rounded-2xl bg-gradient-to-br from-purple-950/40 via-slate-900 to-slate-900 border border-purple-500/40 shadow-xl space-y-4">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2 text-purple-300 font-extrabold text-sm">
+                    <ShieldCheck className="w-5 h-5 text-purple-400" />
+                    Identifiants Administrateur Principal (FRAYZEN SHOP)
+                  </div>
+                  <span className="px-2.5 py-0.5 rounded-full bg-purple-500/20 text-purple-300 text-[10px] font-bold border border-purple-500/40">
+                    Sécurité Renforcée
+                  </span>
                 </div>
-                <p className="text-xs text-slate-300">
-                  Ce code PIN à 6 chiffres est demandé à chaque fois qu'un administrateur tente d'accéder au Panneau d'Administration. Vous pouvez le modifier ici à tout moment.
+
+                <p className="text-xs text-slate-300 leading-relaxed">
+                  Chanje adrès email ak mot de passe administrateur a nenpòt lè. Depi w anrejistre modifikasyon yo, se sèlman nouvo mot de passe sa a ki ap aksepte pou konekte sou kont admin nan.
                 </p>
-                <input
-                  type="text"
-                  maxLength={6}
-                  required
-                  value={adminPinConfig}
-                  onChange={e => setAdminPinConfig(e.target.value)}
-                  className="w-full sm:w-64 px-4 py-2.5 rounded-xl glass-input text-lg font-mono font-bold tracking-widest text-amber-300 border-amber-500/40"
-                  placeholder="123456"
-                />
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div className="space-y-1">
+                    <label className="text-xs font-bold text-slate-300 flex items-center gap-1.5">
+                      <User className="w-3.5 h-3.5 text-purple-400" /> Email Administrateur Principal
+                    </label>
+                    <input
+                      type="email"
+                      required
+                      value={adminEmailConfig}
+                      onChange={e => setAdminEmailConfig(e.target.value)}
+                      className="w-full px-4 py-2.5 rounded-xl glass-input text-sm text-white font-mono font-bold border-purple-500/30"
+                      placeholder="Junioradrien284@gmail.com"
+                    />
+                  </div>
+
+                  <div className="space-y-1">
+                    <label className="text-xs font-bold text-slate-300 flex items-center gap-1.5">
+                      <Lock className="w-3.5 h-3.5 text-purple-400" /> Mot de Passe Administrateur
+                    </label>
+                    <div className="relative">
+                      <input
+                        type={showAdminPassword ? 'text' : 'password'}
+                        required
+                        value={adminPasswordConfig}
+                        onChange={e => setAdminPasswordConfig(e.target.value)}
+                        className="w-full pl-4 pr-10 py-2.5 rounded-xl glass-input text-sm text-white font-mono font-bold border-purple-500/30"
+                        placeholder="00009999"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowAdminPassword(!showAdminPassword)}
+                        className="absolute right-3 top-2.5 text-slate-400 hover:text-white"
+                        title={showAdminPassword ? 'Masquer' : 'Afficher'}
+                      >
+                        {showAdminPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="space-y-1 pt-1">
+                  <label className="text-xs font-bold text-slate-300 flex items-center gap-1.5">
+                    <KeyRound className="w-3.5 h-3.5 text-amber-400" /> Code PIN de Sécurité Admin (6 Chiffres)
+                  </label>
+                  <p className="text-[11px] text-slate-400">
+                    Ce code PIN est demandé pour valider les actions sensibles comme l'ajustement du solde ou la modification de configuration.
+                  </p>
+                  <input
+                    type="text"
+                    maxLength={6}
+                    required
+                    value={adminPinConfig}
+                    onChange={e => setAdminPinConfig(e.target.value)}
+                    className="w-full sm:w-64 px-4 py-2.5 rounded-xl glass-input text-lg font-mono font-bold tracking-widest text-amber-300 border-amber-500/40"
+                    placeholder="123456"
+                  />
+                </div>
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -2873,7 +2964,7 @@ export const AdminDashboard: React.FC = () => {
                 className="py-3 px-6 rounded-xl bg-[#1E90FF] hover:bg-blue-600 text-white font-extrabold text-xs flex items-center gap-2 shadow-md"
               >
                 <Save className="w-4 h-4" />
-                {isSavingConfig ? 'Sauvegarde...' : 'Enregistrer Modifications & PIN Admin'}
+                {isSavingConfig ? 'Sauvegarde...' : 'Enregistrer Modifications, Identifiants & PIN Admin'}
               </button>
             </form>
           )}
@@ -2881,6 +2972,11 @@ export const AdminDashboard: React.FC = () => {
           {/* TAB 5: USERS LIST WITH DETAILED MODAL & LIVE SEARCH SUGGESTIONS */}
           {activeAdminTab === 'users' && (() => {
             const filteredUsersList = detailedUsers.filter(u => {
+              if (userRoleFilter === 'client' && u.isAdmin) return false;
+              if (userRoleFilter === 'admin' && !u.isAdmin) return false;
+              if (userRoleFilter === 'verified' && !u.isEmailVerified) return false;
+              if (userRoleFilter === 'unverified' && u.isEmailVerified) return false;
+
               if (!userSearchQuery.trim()) return true;
               const q = userSearchQuery.toLowerCase().trim();
               const nameMatch = (u.name || '').toLowerCase().includes(q);
@@ -2890,18 +2986,91 @@ export const AdminDashboard: React.FC = () => {
               return nameMatch || emailMatch || phoneMatch || idMatch;
             });
 
+            const clientCount = detailedUsers.filter(u => !u.isAdmin).length;
+            const adminCount = detailedUsers.filter(u => u.isAdmin).length;
+            const verifiedCount = detailedUsers.filter(u => u.isEmailVerified).length;
+            const unverifiedCount = detailedUsers.filter(u => !u.isEmailVerified).length;
+
             return (
               <div className="space-y-4 text-white">
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-white/10">
                   <div>
-                    <h2 className="text-xl font-black text-white">Utilisateurs Enregistrés & Profils</h2>
+                    <h2 className="text-xl font-black text-white">Utilisateurs & Profils Clients / Admins</h2>
                     <p className="text-xs text-slate-400">
-                      Recherche instantanée par nom, email, ID utilisateur ou numéro de téléphone.
+                      Visualisez les rôles (Client vs Admin), l'état de vérification des emails, solde wallet et historique des achats.
                     </p>
                   </div>
                   <span className="text-xs font-mono font-bold px-3 py-1.5 rounded-xl bg-blue-500/20 text-[#1E90FF] border border-blue-500/30 self-start sm:self-auto">
                     {filteredUsersList.length} / {detailedUsers.length} Utilisateur(s)
                   </span>
+                </div>
+
+                {/* FILTER PILLS */}
+                <div className="flex flex-wrap gap-2 pt-1">
+                  <button
+                    type="button"
+                    onClick={() => setUserRoleFilter('all')}
+                    className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-colors flex items-center gap-1.5 ${
+                      userRoleFilter === 'all'
+                        ? 'bg-[#1E90FF] text-white shadow-md'
+                        : 'bg-slate-900 hover:bg-slate-800 text-slate-300 border border-slate-800'
+                    }`}
+                  >
+                    <Users className="w-3.5 h-3.5" />
+                    Tous ({detailedUsers.length})
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setUserRoleFilter('client')}
+                    className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-colors flex items-center gap-1.5 ${
+                      userRoleFilter === 'client'
+                        ? 'bg-blue-600 text-white shadow-md'
+                        : 'bg-slate-900 hover:bg-slate-800 text-blue-400 border border-slate-800'
+                    }`}
+                  >
+                    <User className="w-3.5 h-3.5" />
+                    Clients ({clientCount})
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setUserRoleFilter('admin')}
+                    className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-colors flex items-center gap-1.5 ${
+                      userRoleFilter === 'admin'
+                        ? 'bg-purple-600 text-white shadow-md'
+                        : 'bg-slate-900 hover:bg-slate-800 text-purple-400 border border-slate-800'
+                    }`}
+                  >
+                    <ShieldCheck className="w-3.5 h-3.5" />
+                    Admins ({adminCount})
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setUserRoleFilter('verified')}
+                    className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-colors flex items-center gap-1.5 ${
+                      userRoleFilter === 'verified'
+                        ? 'bg-emerald-600 text-white shadow-md'
+                        : 'bg-slate-900 hover:bg-slate-800 text-emerald-400 border border-slate-800'
+                    }`}
+                  >
+                    <CheckCircle2 className="w-3.5 h-3.5" />
+                    Emails Vérifiés ({verifiedCount})
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setUserRoleFilter('unverified')}
+                    className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-colors flex items-center gap-1.5 ${
+                      userRoleFilter === 'unverified'
+                        ? 'bg-amber-600 text-white shadow-md'
+                        : 'bg-slate-900 hover:bg-slate-800 text-amber-400 border border-slate-800'
+                    }`}
+                  >
+                    <AlertCircle className="w-3.5 h-3.5" />
+                    Non Vérifiés ({unverifiedCount})
+                  </button>
                 </div>
 
                 {/* SEARCH INPUT WITH LIVE SUGGESTIONS */}
@@ -2949,9 +3118,20 @@ export const AdminDashboard: React.FC = () => {
                               className="p-3 rounded-xl bg-slate-950/90 border border-slate-800 hover:border-[#1E90FF] cursor-pointer transition-all flex items-center justify-between text-xs group hover:scale-[1.02] shadow-md"
                             >
                               <div className="space-y-0.5 min-w-0 pr-2">
-                                <p className="font-extrabold text-white truncate group-hover:text-[#1E90FF]">
-                                  {u.name}
-                                </p>
+                                <div className="flex items-center gap-1.5">
+                                  <p className="font-extrabold text-white truncate group-hover:text-[#1E90FF]">
+                                    {u.name}
+                                  </p>
+                                  {u.isAdmin ? (
+                                    <span className="px-1.5 py-0.2 rounded bg-purple-500/20 text-purple-300 text-[9px] font-extrabold border border-purple-500/30">
+                                      Admin
+                                    </span>
+                                  ) : (
+                                    <span className="px-1.5 py-0.2 rounded bg-blue-500/10 text-blue-300 text-[9px] font-medium border border-blue-500/20">
+                                      Client
+                                    </span>
+                                  )}
+                                </div>
                                 <p className="text-[10px] text-slate-400 truncate">{u.email}</p>
                                 <div className="flex items-center gap-2 text-[10px] text-slate-500 font-mono">
                                   <span>ID: {u.id}</span>
@@ -2970,22 +3150,23 @@ export const AdminDashboard: React.FC = () => {
                 </div>
 
                 {/* USERS TABLE */}
-                <div className="overflow-x-auto rounded-2xl border border-slate-800 bg-slate-900/60">
+                <div className="overflow-x-auto rounded-2xl border border-slate-800 bg-slate-900/60 shadow-lg">
                   <table className="w-full text-left text-xs text-slate-300">
                     <thead>
-                      <tr className="border-b border-slate-800 bg-slate-950/80 text-slate-400 uppercase font-bold text-[10px]">
-                        <th className="py-3 px-3">Nom / ID</th>
-                        <th className="py-3 px-3">Email</th>
-                        <th className="py-3 px-3">Téléphone</th>
-                        <th className="py-3 px-3">Solde Wallet</th>
-                        <th className="py-3 px-3">Commandes</th>
-                        <th className="py-3 px-3">Action</th>
+                      <tr className="border-b border-slate-800 bg-slate-950/90 text-slate-400 uppercase font-bold text-[10px]">
+                        <th className="py-3.5 px-3">Nom / ID</th>
+                        <th className="py-3.5 px-3">Rôle</th>
+                        <th className="py-3.5 px-3">Email & Statut Email</th>
+                        <th className="py-3.5 px-3">Téléphone</th>
+                        <th className="py-3.5 px-3">Solde Wallet</th>
+                        <th className="py-3.5 px-3">Commandes</th>
+                        <th className="py-3.5 px-3 text-right">Actions</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-800/80">
                       {filteredUsersList.length === 0 ? (
                         <tr>
-                          <td colSpan={6} className="py-8 text-center text-slate-400 font-semibold">
+                          <td colSpan={7} className="py-8 text-center text-slate-400 font-semibold">
                             Aucun utilisateur trouvé avec ces critères de recherche.
                           </td>
                         </tr>
@@ -2998,7 +3179,9 @@ export const AdminDashboard: React.FC = () => {
                           >
                             <td className="py-3 px-3 font-bold text-white">
                               <div className="flex items-center gap-2">
-                                <div className="w-7 h-7 rounded-full bg-[#1E90FF]/20 text-[#1E90FF] font-black flex items-center justify-center text-xs shrink-0">
+                                <div className={`w-7 h-7 rounded-full font-black flex items-center justify-center text-xs shrink-0 ${
+                                  u.isAdmin ? 'bg-purple-500/20 text-purple-400 border border-purple-500/30' : 'bg-[#1E90FF]/20 text-[#1E90FF]'
+                                }`}>
                                   {u.name ? u.name.charAt(0).toUpperCase() : 'U'}
                                 </div>
                                 <div>
@@ -3007,22 +3190,67 @@ export const AdminDashboard: React.FC = () => {
                                 </div>
                               </div>
                             </td>
-                            <td className="py-3 px-3 text-slate-300 font-medium">{u.email}</td>
+
+                            <td className="py-3 px-3">
+                              {u.isAdmin ? (
+                                <span className="px-2.5 py-1 rounded-full bg-purple-500/20 text-purple-300 border border-purple-500/40 text-[10px] font-extrabold inline-flex items-center gap-1 shadow-sm">
+                                  <ShieldCheck className="w-3 h-3 text-purple-400" /> Admin
+                                </span>
+                              ) : (
+                                <span className="px-2.5 py-1 rounded-full bg-blue-500/10 text-blue-300 border border-blue-500/20 text-[10px] font-medium inline-flex items-center gap-1">
+                                  <User className="w-3 h-3 text-blue-400" /> Client
+                                </span>
+                              )}
+                            </td>
+
+                            <td className="py-3 px-3">
+                              <div className="space-y-1">
+                                <p className="text-slate-200 font-mono text-xs">{u.email}</p>
+                                <div>
+                                  {u.isEmailVerified ? (
+                                    <span className="px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 text-[10px] font-bold inline-flex items-center gap-1">
+                                      <CheckCircle2 className="w-3 h-3 text-emerald-400" /> Vérifié
+                                    </span>
+                                  ) : (
+                                    <span className="px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/30 text-[10px] font-bold inline-flex items-center gap-1">
+                                      <AlertCircle className="w-3 h-3 text-amber-400" /> Non Vérifié
+                                    </span>
+                                  )}
+                                </div>
+                              </div>
+                            </td>
+
                             <td className="py-3 px-3 font-mono text-slate-300">{u.phone}</td>
                             <td className="py-3 px-3 font-black text-[#1E90FF]">{u.walletBalanceHTG} HTG</td>
                             <td className="py-3 px-3 font-bold text-emerald-400">
                               {u.totalPurchasesCount || 0} achats
                             </td>
-                            <td className="py-3 px-3">
-                              <button
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  setSelectedUserModal(u);
-                                }}
-                                className="px-2.5 py-1 rounded-lg bg-blue-500/20 text-[#1E90FF] font-bold text-[10px] hover:bg-[#1E90FF] hover:text-white transition-colors"
-                              >
-                                Fiche Profil
-                              </button>
+                            <td className="py-3 px-3 text-right">
+                              <div className="flex items-center justify-end gap-1.5">
+                                {!u.isEmailVerified && (
+                                  <button
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      handleManualVerifyEmail(u.email);
+                                    }}
+                                    disabled={isVerifyingUserEmail === u.email}
+                                    className="px-2.5 py-1 rounded-lg bg-emerald-600/30 hover:bg-emerald-600 text-emerald-300 hover:text-white font-bold text-[10px] border border-emerald-500/40 transition-colors flex items-center gap-1"
+                                    title="Activer manuellement l'email de cet utilisateur"
+                                  >
+                                    <CheckCircle2 className="w-3 h-3" />
+                                    {isVerifyingUserEmail === u.email ? '...' : 'Activer'}
+                                  </button>
+                                )}
+                                <button
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setSelectedUserModal(u);
+                                  }}
+                                  className="px-2.5 py-1 rounded-lg bg-blue-500/20 text-[#1E90FF] font-bold text-[10px] hover:bg-[#1E90FF] hover:text-white transition-colors"
+                                >
+                                  Fiche Profil
+                                </button>
+                              </div>
                             </td>
                           </tr>
                         ))

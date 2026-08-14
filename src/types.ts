@@ -102,6 +102,8 @@ export interface NatcashConfig {
   supportPhone: string;
   supportEmail: string;
   adminPin?: string;
+  adminEmail?: string;
+  adminPassword?: string;
 }
 
 export interface UserDetailedMetrics extends UserProfile {

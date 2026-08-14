@@ -522,8 +522,17 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         setUser(prev => prev ? ({ ...prev, walletBalanceHTG: data.remainingWalletBalance }) : null);
       }
 
+      if (data.order) {
+        setOrders(prev => [data.order, ...prev.filter(o => o.id !== data.order.id)]);
+      }
+
+      // Clear any pending modal alerts to avoid blocking popup
+      setNotification(null);
       triggerConfetti();
-      showToast(data.message || 'Commande réussie !', 'success');
+      
+      // Immediately navigate to the redeem pins portal
+      setActiveTab('redeempins');
+
       await refreshData();
       return { success: true, order: data.order };
     } catch {

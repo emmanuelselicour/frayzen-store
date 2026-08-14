@@ -26,12 +26,17 @@ export const AlertModal: React.FC = () => {
 
   if (!notification) return null;
 
+  const isError = notification.type === 'error';
+  const isSuccess = notification.type === 'success';
+
+  // Only trigger out-of-stock / contact warning when NOT a success and explicitly out of stock
   const isStockOrPinNotice =
-    notification.message.toLowerCase().includes('pin') ||
-    notification.message.toLowerCase().includes('stock') ||
-    notification.message.toLowerCase().includes('attendez-nous') ||
-    notification.message.toLowerCase().includes('contactez nous') ||
-    notification.message.toLowerCase().includes('rupture');
+    !isSuccess &&
+    (notification.message.toLowerCase().includes('stock épuisé') ||
+     notification.message.toLowerCase().includes('rupture de stock') ||
+     notification.message.toLowerCase().includes('aucun code pin disponible') ||
+     notification.message.toLowerCase().includes('attendez-nous') ||
+     notification.message.toLowerCase().includes('contactez nous'));
 
   const isBalanceNotice =
     notification.message.toLowerCase().includes('solde') ||
@@ -52,9 +57,6 @@ export const AlertModal: React.FC = () => {
   const handleClose = () => {
     setNotification(null);
   };
-
-  const isError = notification.type === 'error';
-  const isSuccess = notification.type === 'success';
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-md animate-in fade-in duration-200">

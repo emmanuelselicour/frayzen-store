@@ -115,7 +115,9 @@ export const INITIAL_NATCASH_CONFIG: NatcashConfig = {
   instructions: 'Envoyez le montant exact sur NATCASH ou MonCash ci-dessus. Copiez ensuite votre code de transaction à 14 chiffres ou téléversez la capture d\'écran.',
   supportPhone: '+509 4135 5116',
   supportEmail: 'contact@frayzenshop.com',
-  adminPin: '123456'
+  adminPin: '123456',
+  adminEmail: 'Junioradrien284@gmail.com',
+  adminPassword: '00009999'
 };
 
 export const INITIAL_DEPOSITS: WalletDeposit[] = [];

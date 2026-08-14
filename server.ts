@@ -75,7 +75,17 @@ let tickets: ContactTicket[] = [...INITIAL_TICKETS];
 let pins: PinRecord[] = [];
 let users: UserProfile[] = [
   {
-    id: 'usr-admin',
+    id: 'usr-admin-junior',
+    name: 'Junior Adrien',
+    email: 'Junioradrien284@gmail.com',
+    phone: '50941355116',
+    createdAt: new Date().toISOString(),
+    isEmailVerified: true,
+    walletBalanceHTG: 0,
+    isAdmin: true
+  },
+  {
+    id: 'usr-admin-emmanuel',
     name: 'Emmanuel Selicour',
     email: 'emmanuel@gmail.com',
     phone: '50941355116',
@@ -192,7 +202,7 @@ app.get('/api/natcash-config', async (req, res) => {
 
 app.post('/api/natcash-config', async (req, res) => {
   try {
-    const { number, name, moncashNumber, moncashName, instructions, supportPhone, supportEmail, adminPin } = req.body || {};
+    const { number, name, moncashNumber, moncashName, instructions, supportPhone, supportEmail, adminPin, adminEmail, adminPassword } = req.body || {};
     if (!number || !name) {
       return res.status(400).json({ error: 'Le numéro NATCASH et le nom du destinataire sont requis.' });
     }
@@ -204,11 +214,13 @@ app.post('/api/natcash-config', async (req, res) => {
       instructions: instructions || natcashConfig.instructions,
       supportPhone: supportPhone || natcashConfig.supportPhone,
       supportEmail: supportEmail || natcashConfig.supportEmail,
-      adminPin: adminPin ? String(adminPin).trim() : (natcashConfig.adminPin || '123456')
+      adminPin: adminPin ? String(adminPin).trim() : (natcashConfig.adminPin || '123456'),
+      adminEmail: adminEmail ? String(adminEmail).trim() : (natcashConfig.adminEmail || 'Junioradrien284@gmail.com'),
+      adminPassword: adminPassword ? String(adminPassword).trim() : (natcashConfig.adminPassword || '00009999')
     };
     saveDataStore();
     await syncNatcashConfigToSupabase(natcashConfig);
-    res.json({ message: 'Configuration de paiement NATCASH / MonCash mise à jour avec succès.', config: natcashConfig });
+    res.json({ message: 'Configuration de paiement et identifiants administrateur mis à jour avec succès.', config: natcashConfig });
   } catch (err: any) {
     console.error('Error in POST /api/natcash-config:', err);
     res.status(500).json({ error: err?.message || 'Erreur lors de la mise à jour de la configuration.' });
@@ -465,22 +477,57 @@ app.delete('/api/pins/:id', async (req, res) => {
 // Auth & User Profile API
 app.post('/api/auth/login', async (req, res) => {
   try {
-    const { emailOrPhone } = req.body || {};
+    const { emailOrPhone, password } = req.body || {};
     if (!emailOrPhone) {
       return res.status(400).json({ error: 'Veuillez saisir votre email ou numéro de téléphone.' });
     }
 
     const query = String(emailOrPhone).toLowerCase().trim();
+    const config = await fetchNatcashConfigFromSupabase();
+    const activeAdminEmail = (config.adminEmail || natcashConfig.adminEmail || 'Junioradrien284@gmail.com').toLowerCase().trim();
+    const activeAdminPassword = config.adminPassword || natcashConfig.adminPassword || '00009999';
+
+    const ADMIN_EMAILS = [
+      activeAdminEmail,
+      'junioradrien284@gmail.com',
+      'emmanuelselicour.2002@gmail.com',
+      'emmanuel@gmail.com'
+    ];
+
     const allUsers = await fetchUsersFromSupabase(users);
     let user = allUsers.find(u => u.email.toLowerCase() === query || (u.phone && u.phone.toLowerCase() === query));
+
+    const isExplicitAdminQuery = ADMIN_EMAILS.includes(query);
+
+    // If query matches admin email directly but user row does not exist yet, bootstrap admin user
+    if (!user && isExplicitAdminQuery) {
+      user = {
+        id: 'usr-admin-junior',
+        name: 'Junior Adrien',
+        email: query,
+        phone: config.supportPhone || '50941355116',
+        createdAt: new Date().toISOString(),
+        isEmailVerified: true,
+        walletBalanceHTG: 0,
+        isAdmin: true
+      };
+      users.push(user);
+      saveDataStore();
+    }
 
     if (!user) {
       return res.status(404).json({ error: 'Compte introuvable. Veuillez créer un compte FRAYZEN.' });
     }
 
-    const ADMIN_EMAILS = ['emmanuelselicour.2002@gmail.com', 'emmanuel@gmail.com', 'danyff455@gmail.com'];
-    const isAdmin = ADMIN_EMAILS.includes(user.email.toLowerCase().trim());
+    const isAdmin = isExplicitAdminQuery || ADMIN_EMAILS.includes(user.email.toLowerCase().trim()) || user.isAdmin === true;
+    
+    // Strict Admin Password Verification: Do NOT bypass password!
     if (isAdmin) {
+      if (!password || String(password).trim() !== activeAdminPassword) {
+        return res.status(401).json({
+          error: 'Mot de passe administrateur incorrect. Veuillez saisir le bon mot de passe (défaut: 00009999 ou celui configuré).'
+        });
+      }
       user.isAdmin = true;
       user.isEmailVerified = true;
       await syncUserToSupabase(user);
@@ -530,7 +577,14 @@ app.post('/api/auth/register', async (req, res) => {
       return res.status(400).json({ error: 'Tous les champs (Nom, Email, Numéro) sont obligatoires.' });
     }
 
-    const ADMIN_EMAILS = ['emmanuelselicour.2002@gmail.com', 'emmanuel@gmail.com', 'danyff455@gmail.com'];
+    const config = await fetchNatcashConfigFromSupabase();
+    const activeAdminEmail = (config.adminEmail || natcashConfig.adminEmail || 'Junioradrien284@gmail.com').toLowerCase().trim();
+    const ADMIN_EMAILS = [
+      activeAdminEmail,
+      'junioradrien284@gmail.com',
+      'emmanuelselicour.2002@gmail.com',
+      'emmanuel@gmail.com'
+    ];
     const normalizedEmail = String(email).toLowerCase().trim();
     const normalizedPhone = String(phone).trim();
 
@@ -665,9 +719,17 @@ app.get('/api/user/profile/:email', async (req, res) => {
     if (!user) {
       return res.status(404).json({ error: 'Utilisateur non trouvé.' });
     }
-    const ADMIN_EMAILS = ['emmanuelselicour.2002@gmail.com', 'emmanuel@gmail.com', 'danyff455@gmail.com'];
+    const config = await fetchNatcashConfigFromSupabase();
+    const activeAdminEmail = (config.adminEmail || natcashConfig.adminEmail || 'Junioradrien284@gmail.com').toLowerCase().trim();
+    const ADMIN_EMAILS = [
+      activeAdminEmail,
+      'junioradrien284@gmail.com',
+      'emmanuelselicour.2002@gmail.com',
+      'emmanuel@gmail.com'
+    ];
     if (ADMIN_EMAILS.includes(user.email.toLowerCase().trim())) {
       user.isAdmin = true;
+      user.isEmailVerified = true;
     }
 
     const allOrders = await fetchOrdersFromSupabase(undefined, orders);
@@ -699,17 +761,50 @@ app.get('/api/users', async (req, res) => {
 
 app.get('/api/admin/users-detailed', async (req, res) => {
   try {
+    const config = await fetchNatcashConfigFromSupabase();
+    const activeAdminEmail = (config.adminEmail || natcashConfig.adminEmail || 'Junioradrien284@gmail.com').toLowerCase().trim();
+    const ADMIN_EMAILS = [
+      activeAdminEmail,
+      'junioradrien284@gmail.com',
+      'emmanuelselicour.2002@gmail.com',
+      'emmanuel@gmail.com'
+    ];
+
     const allUsers = await fetchUsersFromSupabase(users);
     const allOrders = await fetchOrdersFromSupabase(undefined, orders);
+
+    // Also get email confirmation status from Supabase Auth if available
+    let authUsersMap = new Map<string, { email_confirmed: boolean }>();
+    if (supabaseAdmin) {
+      try {
+        const { data: listData } = await supabaseAdmin.auth.admin.listUsers();
+        if (listData && listData.users) {
+          listData.users.forEach((au: any) => {
+            if (au.email) {
+              authUsersMap.set(au.email.toLowerCase().trim(), {
+                email_confirmed: Boolean(au.email_confirmed_at)
+              });
+            }
+          });
+        }
+      } catch (e) {
+        /* ignore */
+      }
+    }
 
     const detailedUsers = allUsers.map(u => {
       const userOrders = allOrders.filter(o => o.userEmail.toLowerCase() === u.email.toLowerCase());
       const totalPurchasesCount = userOrders.length;
       const successfulPurchasesCount = userOrders.filter(o => o.status === 'reussi').length;
       const failedPurchasesCount = userOrders.filter(o => o.status === 'echoue').length;
+      const isAdm = Boolean(u.isAdmin || ADMIN_EMAILS.includes(u.email.toLowerCase().trim()));
+      const authInfo = authUsersMap.get(u.email.toLowerCase().trim());
+      const isVerified = isAdm ? true : Boolean(u.isEmailVerified || authInfo?.email_confirmed);
 
       return {
         ...u,
+        isAdmin: isAdm,
+        isEmailVerified: isVerified,
         totalPurchasesCount,
         successfulPurchasesCount,
         failedPurchasesCount

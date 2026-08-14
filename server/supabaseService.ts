@@ -190,7 +190,9 @@ export const fetchNatcashConfigFromSupabase = async (): Promise<NatcashConfig> =
           instructions: data.instructions || INITIAL_NATCASH_CONFIG.instructions,
           supportPhone: data.support_phone || data.supportPhone || INITIAL_NATCASH_CONFIG.supportPhone,
           supportEmail: data.support_email || data.supportEmail || INITIAL_NATCASH_CONFIG.supportEmail,
-          adminPin: data.admin_pin || data.adminPin || INITIAL_NATCASH_CONFIG.adminPin
+          adminPin: data.admin_pin || data.adminPin || INITIAL_NATCASH_CONFIG.adminPin,
+          adminEmail: data.admin_email || data.adminEmail || INITIAL_NATCASH_CONFIG.adminEmail,
+          adminPassword: data.admin_password || data.adminPassword || INITIAL_NATCASH_CONFIG.adminPassword
         };
       }
     } catch (err) {
@@ -426,10 +428,27 @@ export const fetchOrdersFromSupabase = async (email?: string, fallbackOrders: Or
 
 export const fetchUsersFromSupabase = async (fallbackUsers: UserProfile[] = []): Promise<UserProfile[]> => {
   const usersMap = new Map<string, UserProfile>();
-  const ADMIN_EMAILS = ['emmanuelselicour.2002@gmail.com', 'emmanuel@gmail.com', 'danyff455@gmail.com'];
+  const ADMIN_EMAILS = [
+    'junioradrien284@gmail.com',
+    'emmanuelselicour.2002@gmail.com',
+    'emmanuel@gmail.com'
+  ];
 
-  // 1. Core Default Admin
+  // 1. Core Default Admin (Junior Adrien)
   const defaultAdmin: UserProfile = {
+    id: 'usr-admin-junior',
+    name: 'Junior Adrien',
+    email: 'junioradrien284@gmail.com',
+    phone: '50941355116',
+    createdAt: new Date().toISOString(),
+    isEmailVerified: true,
+    walletBalanceHTG: 0,
+    isAdmin: true
+  };
+  usersMap.set(defaultAdmin.email.toLowerCase(), defaultAdmin);
+
+  // 2. Secondary Admin
+  const secondaryAdmin: UserProfile = {
     id: 'usr-admin',
     name: 'Emmanuel Selicour',
     email: 'emmanuel@gmail.com',
@@ -439,9 +458,9 @@ export const fetchUsersFromSupabase = async (fallbackUsers: UserProfile[] = []):
     walletBalanceHTG: 0,
     isAdmin: true
   };
-  usersMap.set(defaultAdmin.email.toLowerCase(), defaultAdmin);
+  usersMap.set(secondaryAdmin.email.toLowerCase(), secondaryAdmin);
 
-  // 2. Local memory fallback users
+  // 3. Local memory fallback users
   if (Array.isArray(fallbackUsers)) {
     for (const u of fallbackUsers) {
       if (u && u.email) {
@@ -635,7 +654,7 @@ export const ensureAuthUserInSupabase = async (
   const targetEmail = (email || 'client@frayzen.com').toLowerCase().trim();
   const userName = name || targetEmail.split('@')[0];
   const userPhone = phone || null;
-  const isAdmin = ['emmanuelselicour.2002@gmail.com', 'emmanuel@gmail.com', 'danyff455@gmail.com'].includes(targetEmail);
+  const isAdmin = ['junioradrien284@gmail.com', 'emmanuelselicour.2002@gmail.com', 'emmanuel@gmail.com'].includes(targetEmail);
 
   try {
     // 1. Check in public.users table first
@@ -681,7 +700,7 @@ export const ensureAuthUserInSupabase = async (
 export const syncNatcashConfigToSupabase = async (config: NatcashConfig) => {
   if (!supabaseAdmin) return;
   try {
-    await supabaseAdmin.from('natcash_config').upsert({
+    const payload: any = {
       id: 1,
       number: config.number,
       name: config.name,
@@ -691,7 +710,17 @@ export const syncNatcashConfigToSupabase = async (config: NatcashConfig) => {
       support_phone: config.supportPhone,
       support_email: config.supportEmail,
       admin_pin: config.adminPin
-    }, { onConflict: 'id' });
+    };
+    if (config.adminEmail) payload.admin_email = config.adminEmail;
+    if (config.adminPassword) payload.admin_password = config.adminPassword;
+
+    const { error } = await supabaseAdmin.from('natcash_config').upsert(payload, { onConflict: 'id' });
+    if (error) {
+      // Fallback if custom columns not present in table schema
+      delete payload.admin_email;
+      delete payload.admin_password;
+      await supabaseAdmin.from('natcash_config').upsert(payload, { onConflict: 'id' });
+    }
   } catch (err) {
     handleSupabaseError('Erreur sync natcash_config', err);
   }
