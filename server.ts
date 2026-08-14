@@ -23,6 +23,8 @@ import {
   syncAllPinsToSupabase,
   deletePinFromSupabase,
   signUpWithSupabaseAuth,
+  resendVerificationEmail,
+  supabaseAdmin,
   isSupabaseServerConfigured,
   toUuid
 } from './server/supabaseService';
@@ -470,16 +472,48 @@ app.post('/api/auth/login', async (req, res) => {
 
     const query = String(emailOrPhone).toLowerCase().trim();
     const allUsers = await fetchUsersFromSupabase(users);
-    let user = allUsers.find(u => u.email.toLowerCase() === query || u.phone.toLowerCase() === query);
+    let user = allUsers.find(u => u.email.toLowerCase() === query || (u.phone && u.phone.toLowerCase() === query));
 
     if (!user) {
-      return res.status(404).json({ error: 'Compte introuvable. Veuillez créer un compte.' });
+      return res.status(404).json({ error: 'Compte introuvable. Veuillez créer un compte FRAYZEN.' });
     }
 
     const ADMIN_EMAILS = ['emmanuelselicour.2002@gmail.com', 'emmanuel@gmail.com', 'danyff455@gmail.com'];
-    if (ADMIN_EMAILS.includes(user.email.toLowerCase())) {
+    const isAdmin = ADMIN_EMAILS.includes(user.email.toLowerCase().trim());
+    if (isAdmin) {
       user.isAdmin = true;
+      user.isEmailVerified = true;
       await syncUserToSupabase(user);
+      return res.json(user);
+    }
+
+    // Check if user has confirmed their email in Supabase Auth
+    if (supabaseAdmin) {
+      try {
+        const { data: listData } = await supabaseAdmin.auth.admin.listUsers();
+        const authUser = listData?.users?.find(
+          (u: any) => u.email?.toLowerCase().trim() === user?.email.toLowerCase().trim()
+        );
+        if (authUser && authUser.email_confirmed_at) {
+          user.isEmailVerified = true;
+          await supabaseAdmin.from('users').update({ is_email_verified: true }).eq('email', user.email.toLowerCase().trim());
+          const uIdx = users.findIndex(u => u.email.toLowerCase() === user?.email.toLowerCase());
+          if (uIdx !== -1) users[uIdx].isEmailVerified = true;
+          saveDataStore();
+        }
+      } catch (err) {
+        console.warn('[Supabase Auth check in login error]:', err);
+      }
+    }
+
+    // Block unverified users from logging in
+    if (!user.isEmailVerified) {
+      return res.status(403).json({
+        error: `Votre compte n'est pas encore activé. Veuillez vérifier votre boîte Gmail (${user.email}) et cliquer sur le lien de confirmation envoyé pour activer votre compte FRAYZEN SHOP avant de vous connecter.`,
+        requiresVerification: true,
+        email: user.email,
+        name: user.name
+      });
     }
 
     return res.json(user);
@@ -506,9 +540,23 @@ app.post('/api/auth/register', async (req, res) => {
     if (existingUser) {
       if (ADMIN_EMAILS.includes(normalizedEmail)) {
         existingUser.isAdmin = true;
+        existingUser.isEmailVerified = true;
         await syncUserToSupabase(existingUser);
+        return res.json({ requiresVerification: false, user: existingUser });
       }
-      return res.json(existingUser);
+
+      if (!existingUser.isEmailVerified) {
+        // Resend confirmation email via Supabase Auth
+        resendVerificationEmail(normalizedEmail).catch(() => {});
+        return res.status(403).json({
+          error: `Un compte existe déjà avec cette adresse email mais n'est pas encore activé. Veuillez vérifier votre boîte de réception Gmail (${normalizedEmail}) pour l'activer.`,
+          requiresVerification: true,
+          email: existingUser.email,
+          name: existingUser.name
+        });
+      }
+
+      return res.json({ requiresVerification: false, user: existingUser });
     }
 
     const isAdminUser = ADMIN_EMAILS.includes(normalizedEmail);
@@ -519,7 +567,7 @@ app.post('/api/auth/register', async (req, res) => {
       email: normalizedEmail,
       phone: normalizedPhone,
       createdAt: new Date().toISOString(),
-      isEmailVerified: true,
+      isEmailVerified: isAdminUser ? true : false,
       walletBalanceHTG: 0,
       isAdmin: isAdminUser
     };
@@ -534,25 +582,75 @@ app.post('/api/auth/register', async (req, res) => {
       console.error('Supabase async trigger exception:', e);
     }
 
-    return res.status(201).json(newUser);
+    if (!isAdminUser) {
+      return res.status(201).json({
+        requiresVerification: true,
+        message: `Compte FRAYZEN SHOP créé avec succès ! Un email d'activation a été envoyé à votre adresse Gmail (${normalizedEmail}). Veuillez cliquer sur le lien dans l'email pour activer votre compte avant de vous connecter.`,
+        user: newUser
+      });
+    }
+
+    return res.status(201).json({
+      requiresVerification: false,
+      message: 'Compte Administrateur FRAYZEN créé avec succès !',
+      user: newUser
+    });
   } catch (err: any) {
     console.error('Register route error:', err);
     return res.status(500).json({ error: err?.message || 'Erreur serveur lors de la création du compte.' });
   }
 });
 
+app.post('/api/auth/resend-verification', async (req, res) => {
+  try {
+    const { email } = req.body || {};
+    if (!email) {
+      return res.status(400).json({ error: 'Adresse email requise.' });
+    }
+    const targetEmail = String(email).toLowerCase().trim();
+    const result = await resendVerificationEmail(targetEmail);
+    if (!result.success) {
+      return res.status(400).json({ error: result.error || 'Erreur lors du renvoi de l\'email.' });
+    }
+    return res.json({ message: `Un nouvel email de confirmation a été envoyé à ${targetEmail}. Veuillez vérifier votre boîte Gmail.` });
+  } catch (err: any) {
+    console.error('Error in /api/auth/resend-verification:', err);
+    return res.status(500).json({ error: err?.message || 'Erreur lors du renvoi de l\'email.' });
+  }
+});
+
 app.post('/api/auth/verify-email', async (req, res) => {
   try {
     const { email } = req.body || {};
+    if (!email) {
+      return res.status(400).json({ error: 'Email requis.' });
+    }
+    const targetEmail = String(email).toLowerCase().trim();
     const allUsers = await fetchUsersFromSupabase(users);
-    const user = allUsers.find(u => u.email.toLowerCase() === String(email).toLowerCase().trim());
+    const user = allUsers.find(u => u.email.toLowerCase() === targetEmail);
     if (!user) {
       return res.status(404).json({ error: 'Utilisateur introuvable.' });
     }
 
     user.isEmailVerified = true;
+    const uIdx = users.findIndex(u => u.email.toLowerCase() === targetEmail);
+    if (uIdx !== -1) users[uIdx].isEmailVerified = true;
+    saveDataStore();
+
     await syncUserToSupabase(user);
-    res.json({ message: 'Email vérifié avec succès. Bienvenue sur FRAYZEN SHOP !', user });
+
+    // Also confirm in Supabase Auth if possible
+    if (supabaseAdmin) {
+      try {
+        const { data: listData } = await supabaseAdmin.auth.admin.listUsers();
+        const authUser = listData?.users?.find((u: any) => u.email?.toLowerCase().trim() === targetEmail);
+        if (authUser && !authUser.email_confirmed_at) {
+          await supabaseAdmin.auth.admin.updateUserById(authUser.id, { email_confirm: true });
+        }
+      } catch (e) { /* ignore */ }
+    }
+
+    res.json({ message: 'Email vérifié avec succès. Votre compte FRAYZEN SHOP est désormais activé !', user });
   } catch (err: any) {
     console.error('Error in /api/auth/verify-email:', err);
     res.status(500).json({ error: err?.message || 'Erreur lors de la vérification de l\'email.' });
@@ -958,7 +1056,7 @@ app.post('/api/orders', async (req, res) => {
       } else {
         // No PIN available in stock - reject order safely
         return res.status(400).json({
-          error: `Rupture de stock : Il n'y a actuellement aucun code PIN disponible en stock pour le pack "${product.name}" (${product.priceHTG} HTG). L'administrateur a été notifié pour réapprovisionner le stock.`
+          error: `Il n'y a pas de PIN disponible pour ce pack pour l'instant, attendez-nous, ou contactez-nous direct pour en discuter.`
         });
       }
 
@@ -1240,6 +1338,10 @@ app.delete('/api/contact/:id', async (req, res) => {
 // Admin Stats Dashboard API
 app.get('/api/admin/stats', async (req, res) => {
   try {
+    res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+    res.setHeader('Pragma', 'no-cache');
+    res.setHeader('Expires', '0');
+
     const allOrders = await fetchOrdersFromSupabase(undefined, orders);
     const allUsers = await fetchUsersFromSupabase(users);
     const allDeposits = await fetchDepositsFromSupabase(undefined, walletDeposits);

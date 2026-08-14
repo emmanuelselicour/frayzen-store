@@ -6,6 +6,7 @@ import { Footer } from './components/Footer';
 import { AuthModal } from './components/AuthModal';
 import { DepositModal } from './components/DepositModal';
 import { EmailVerifyModal } from './components/EmailVerifyModal';
+import { AlertModal } from './components/AlertModal';
 import { Accueil } from './pages/Accueil';
 import { Produits } from './pages/Produits';
 import { Paiement } from './pages/Paiement';
@@ -16,10 +17,9 @@ import { AdminDashboard } from './pages/AdminDashboard';
 import { RedeemPins } from './pages/RedeemPins';
 import { MesCommandes } from './pages/MesCommandes';
 import { Faq } from './pages/Faq';
-import { CheckCircle2, AlertCircle, Info, X } from 'lucide-react';
 
 const MainContent: React.FC = () => {
-  const { activeTab, notification, setNotification } = useApp();
+  const { activeTab } = useApp();
   const isAdminView = activeTab === 'admin';
 
   return (
@@ -28,30 +28,6 @@ const MainContent: React.FC = () => {
       {/* Background Ambient Lights */}
       <div className="fixed top-[-100px] left-[-100px] w-96 h-96 bg-blue-400/20 rounded-full blur-[100px] pointer-events-none z-0"></div>
       <div className="fixed bottom-[-50px] right-[-50px] w-[500px] h-[500px] bg-red-400/10 rounded-full blur-[120px] pointer-events-none z-0"></div>
-
-      {/* Toast Notification Bar */}
-      {notification && (
-        <div className="fixed bottom-6 right-6 z-50 max-w-md animate-in slide-in-from-bottom-5 duration-300">
-          <div className={`p-4 rounded-2xl glass-card border shadow-2xl flex items-start gap-3 ${
-            notification.type === 'success' ? 'border-emerald-500/50 bg-emerald-950/90 text-emerald-100' :
-            notification.type === 'error' ? 'border-red-500/50 bg-red-950/90 text-red-100' :
-            'border-blue-500/50 bg-blue-950/90 text-blue-100'
-          }`}>
-            {notification.type === 'success' && <CheckCircle2 className="w-5 h-5 text-emerald-400 shrink-0 mt-0.5" />}
-            {notification.type === 'error' && <AlertCircle className="w-5 h-5 text-red-400 shrink-0 mt-0.5" />}
-            {notification.type === 'info' && <Info className="w-5 h-5 text-blue-400 shrink-0 mt-0.5" />}
-            <div className="flex-1 text-xs font-semibold leading-relaxed">
-              {notification.message}
-            </div>
-            <button
-              onClick={() => setNotification(null)}
-              className="text-gray-400 hover:text-white p-1 rounded-lg"
-            >
-              <X className="w-4 h-4" />
-            </button>
-          </div>
-        </div>
-      )}
 
       {/* Global Header (Hidden on Admin Panel only) */}
       {!isAdminView && <Header />}
@@ -87,6 +63,7 @@ const MainContent: React.FC = () => {
       <AuthModal />
       <DepositModal />
       <EmailVerifyModal />
+      <AlertModal />
 
     </div>
   );

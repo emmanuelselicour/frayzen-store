@@ -196,7 +196,7 @@ export const Profil: React.FC = () => {
                           className="w-full py-2 rounded-lg bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/30 text-emerald-300 font-extrabold text-[11px] flex items-center justify-center gap-1.5 transition-colors"
                         >
                           <Gift className="w-3.5 h-3.5 text-amber-400" />
-                          Réclamer mes diamants (pin.wik.do)
+                          Réclamer mes diamants (redeem.hype.games)
                           <ExternalLink className="w-3 h-3" />
                         </button>
                       </div>

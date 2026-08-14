@@ -30,9 +30,10 @@ interface AppContextType {
   setNotification: (notif: { type: 'success' | 'error' | 'info'; message: string } | null) => void;
   showToast: (message: string, type?: 'success' | 'error' | 'info') => void;
   refreshData: () => Promise<void>;
-  registerUser: (name: string, email: string, phone: string, password?: string) => Promise<boolean>;
-  loginUser: (emailOrPhone: string, password?: string) => Promise<boolean>;
+  registerUser: (name: string, email: string, phone: string, password?: string) => Promise<{ success: boolean; requiresVerification?: boolean; email?: string; name?: string; message?: string }>;
+  loginUser: (emailOrPhone: string, password?: string) => Promise<{ success: boolean; requiresVerification?: boolean; email?: string; name?: string; message?: string }>;
   verifyUserEmail: (email: string) => Promise<boolean>;
+  resendVerification: (email: string) => Promise<boolean>;
   submitDeposit: (transactionId14: string, amountHTG: number, screenshotUrl?: string, paymentMethod?: 'natcash' | 'moncash') => Promise<boolean>;
   submitOrder: (productId: string, gamePlayerId: string, paymentMethod: 'wallet' | 'natcash_direct' | 'moncash_direct', natcashTxId?: string) => Promise<{ success: boolean; order?: Order }>;
   submitContactTicket: (name: string, email: string, phone: string, subject: string, message: string) => Promise<boolean>;
@@ -187,9 +188,19 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const showToast = (message: string, type: 'success' | 'error' | 'info' = 'info') => {
     setNotification({ type, message });
-    setTimeout(() => {
-      setNotification(null);
-    }, 5000);
+    // Don't auto-dismiss errors or stock notices so the user can read and contact support
+    const isCritical =
+      type === 'error' ||
+      message.toLowerCase().includes('pin') ||
+      message.toLowerCase().includes('stock') ||
+      message.toLowerCase().includes('solde') ||
+      message.toLowerCase().includes('attendez-nous');
+
+    if (!isCritical) {
+      setTimeout(() => {
+        setNotification(prev => (prev?.message === message ? null : prev));
+      }, 7000);
+    }
   };
 
   const triggerConfetti = () => {
@@ -301,7 +312,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     refreshData();
   }, [user?.email, user?.isAdmin]);
 
-  const registerUser = async (name: string, email: string, phone: string, password?: string): Promise<boolean> => {
+  const registerUser = async (name: string, email: string, phone: string, password?: string): Promise<{ success: boolean; requiresVerification?: boolean; email?: string; name?: string; message?: string }> => {
     try {
       const res = await fetch('/api/auth/register', {
         method: 'POST',
@@ -314,25 +325,46 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         data = await res.json();
       } catch (parseErr) {
         showToast('Réponse du serveur invalide.', 'error');
-        return false;
+        return { success: false };
       }
 
       if (!res.ok) {
+        if (data.requiresVerification) {
+          return {
+            success: false,
+            requiresVerification: true,
+            email: data.email || email,
+            name: data.name || name,
+            message: data.error
+          };
+        }
         showToast(data.error || 'Erreur lors de la création du compte.', 'error');
-        return false;
+        return { success: false, message: data.error };
       }
-      setUser(data);
+
+      if (data.requiresVerification) {
+        return {
+          success: true,
+          requiresVerification: true,
+          email: data.user?.email || email,
+          name: data.user?.name || name,
+          message: data.message
+        };
+      }
+
+      const registeredUser = data.user || data;
+      setUser(registeredUser);
       triggerConfetti();
-      showToast(`Bienvenue ${data.name} ! Votre compte est créé avec succès.`, 'success');
-      return true;
+      showToast(`Bienvenue ${registeredUser.name} ! Votre compte est prêt.`, 'success');
+      return { success: true };
     } catch (err) {
       console.error('Register fetch exception:', err);
       showToast('Erreur de connexion au serveur.', 'error');
-      return false;
+      return { success: false };
     }
   };
 
-  const loginUser = async (emailOrPhone: string, password?: string): Promise<boolean> => {
+  const loginUser = async (emailOrPhone: string, password?: string): Promise<{ success: boolean; requiresVerification?: boolean; email?: string; name?: string; message?: string }> => {
     try {
       const res = await fetch('/api/auth/login', {
         method: 'POST',
@@ -345,18 +377,48 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         data = await res.json();
       } catch (parseErr) {
         showToast('Réponse du serveur invalide.', 'error');
-        return false;
+        return { success: false };
       }
 
       if (!res.ok) {
+        if (data.requiresVerification) {
+          return {
+            success: false,
+            requiresVerification: true,
+            email: data.email || emailOrPhone,
+            name: data.name,
+            message: data.error
+          };
+        }
         showToast(data.error || 'Erreur lors de la connexion.', 'error');
-        return false;
+        return { success: false, message: data.error };
       }
+
       setUser(data);
       showToast(`Ravi de vous revoir, ${data.name} !`, 'success');
-      return true;
+      return { success: true };
     } catch (err) {
       console.error('Login fetch exception:', err);
+      showToast('Erreur de connexion au serveur.', 'error');
+      return { success: false };
+    }
+  };
+
+  const resendVerification = async (email: string): Promise<boolean> => {
+    try {
+      const res = await fetch('/api/auth/resend-verification', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email })
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        showToast(data.error || 'Erreur lors du renvoi de l\'email.', 'error');
+        return false;
+      }
+      showToast(data.message || 'Email de confirmation renvoyé avec succès !', 'success');
+      return true;
+    } catch {
       showToast('Erreur de connexion au serveur.', 'error');
       return false;
     }
@@ -540,6 +602,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       registerUser,
       loginUser,
       verifyUserEmail,
+      resendVerification,
       submitDeposit,
       submitOrder,
       submitContactTicket,

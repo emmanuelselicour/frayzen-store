@@ -1,7 +1,7 @@
 import 'dotenv/config';
 import crypto from 'node:crypto';
 import { createClient } from '@supabase/supabase-js';
-import { Product, ProductCategory, NatcashConfig, WalletDeposit, Order, ContactTicket, UserProfile, PinRecord } from '../src/types';
+import { Product, ProductCategory, NatcashConfig, WalletDeposit, DepositStatus, Order, ContactTicket, UserProfile, PinRecord } from '../src/types';
 import { INITIAL_PRODUCTS, INITIAL_NATCASH_CONFIG } from '../src/data/initialData';
 
 // ============================================================================
@@ -467,15 +467,16 @@ export const fetchUsersFromSupabase = async (fallbackUsers: UserProfile[] = []):
               if (u.email) {
                 const key = String(u.email).toLowerCase().trim();
                 const existing = usersMap.get(key);
+                const isAdmin = Boolean(u.is_admin ?? u.isAdmin ?? existing?.isAdmin ?? ADMIN_EMAILS.includes(key));
                 usersMap.set(key, {
                   id: u.id || existing?.id || `usr-${Date.now()}`,
                   name: u.name || existing?.name || key.split('@')[0],
                   email: key,
                   phone: u.phone || existing?.phone || '',
                   createdAt: u.created_at || u.createdAt || existing?.createdAt || new Date().toISOString(),
-                  isEmailVerified: Boolean(u.is_email_verified ?? u.isEmailVerified ?? existing?.isEmailVerified ?? true),
+                  isEmailVerified: isAdmin ? true : Boolean(u.is_email_verified ?? u.isEmailVerified ?? existing?.isEmailVerified ?? false),
                   walletBalanceHTG: Number(u.wallet_balance_htg ?? u.walletBalanceHTG ?? existing?.walletBalanceHTG ?? 0),
-                  isAdmin: Boolean(u.is_admin ?? u.isAdmin ?? existing?.isAdmin ?? ADMIN_EMAILS.includes(key))
+                  isAdmin
                 });
               }
             }
@@ -566,13 +567,16 @@ export const signUpWithSupabaseAuth = async (email: string, name: string, phone:
   try {
     const userPassword = password || `Frayzen_${Math.random().toString(36).slice(-8)}!`;
     const { data, error } = await supabaseAdmin.auth.signUp({
-      email,
+      email: email.toLowerCase().trim(),
       password: userPassword,
       options: {
         data: {
           full_name: name,
+          name: name,
           phone: phone,
-          shop: 'FRAYZEN SHOP'
+          shop: 'FRAYZEN SHOP',
+          app_name: 'FRAYZEN SHOP',
+          company: 'FRAYZEN SHOP'
         }
       }
     });
@@ -586,6 +590,28 @@ export const signUpWithSupabaseAuth = async (email: string, name: string, phone:
   } catch (err: any) {
     handleSupabaseError('Auth exception', err);
     return { success: false, error: err?.message || 'Erreur Supabase Auth' };
+  }
+};
+
+export const resendVerificationEmail = async (email: string) => {
+  if (!supabaseAdmin) {
+    return { success: false, error: 'Supabase non configuré.' };
+  }
+  try {
+    const targetEmail = email.toLowerCase().trim();
+    const { error } = await supabaseAdmin.auth.resend({
+      type: 'signup',
+      email: targetEmail
+    });
+
+    if (error) {
+      console.warn('[Supabase Auth resend signup error]:', error.message);
+      return { success: false, error: error.message };
+    }
+
+    return { success: true, message: `Email de confirmation renvoyé avec succès à ${targetEmail}.` };
+  } catch (err: any) {
+    return { success: false, error: err?.message || 'Erreur lors du renvoi de l\'email.' };
   }
 };
 
@@ -609,12 +635,13 @@ export const ensureAuthUserInSupabase = async (
   const targetEmail = (email || 'client@frayzen.com').toLowerCase().trim();
   const userName = name || targetEmail.split('@')[0];
   const userPhone = phone || null;
+  const isAdmin = ['emmanuelselicour.2002@gmail.com', 'emmanuel@gmail.com', 'danyff455@gmail.com'].includes(targetEmail);
 
   try {
     // 1. Check in public.users table first
     const { data: existingPublic } = await supabaseAdmin
       .from('users')
-      .select('id, email, name, phone, wallet_balance_htg')
+      .select('id, email, name, phone, wallet_balance_htg, is_email_verified')
       .ilike('email', targetEmail)
       .maybeSingle();
 
@@ -639,8 +666,8 @@ export const ensureAuthUserInSupabase = async (
       name: userName,
       phone: userPhone,
       wallet_balance_htg: initBalance,
-      is_admin: false,
-      is_email_verified: true,
+      is_admin: isAdmin,
+      is_email_verified: isAdmin ? true : false,
       created_at: new Date().toISOString()
     }, { onConflict: 'id' });
 

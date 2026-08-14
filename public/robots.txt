@@ -1,0 +1,6 @@
+# robots.txt for FRAYZEN SHOP
+User-agent: *
+Allow: /
+Disallow: /api/
+
+Sitemap: https://frayzen-shop.vercel.app/sitemap.xml

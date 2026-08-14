@@ -31,7 +31,7 @@ export const RedeemPins: React.FC = () => {
 
           <div className="text-center sm:text-right">
             <span className="px-3.5 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/30 text-[11px] font-bold text-emerald-400 uppercase tracking-wider">
-              Portail Officiel • pin.wik.do
+              Portail Officiel • redeem.hype.games
             </span>
             <h1 className="text-2xl sm:text-3xl font-black text-white mt-1">Réclamation de Diamants Free Fire</h1>
           </div>
@@ -90,24 +90,24 @@ export const RedeemPins: React.FC = () => {
       {/* Instruction Steps */}
       <div className="p-4 rounded-2xl bg-slate-900/80 border border-slate-800 text-xs space-y-2">
         <p className="font-bold text-amber-400 flex items-center gap-1.5">
-          <ShieldCheck className="w-4 h-4" /> Instructions d'activation sur pin.wik.do :
+          <ShieldCheck className="w-4 h-4" /> Instructions d'activation sur redeem.hype.games :
         </p>
         <ol className="list-decimal list-inside space-y-1 text-slate-300 text-[11px]">
-          <li>Copiez votre code PIN ci-dessus.</li>
-          <li>Entrez votre ID Joueur Free Fire dans le formulaire ci-dessous.</li>
-          <li>Collez votre code PIN et validez pour recevoir instantanément vos diamants !</li>
+          <li>Copiez votre code PIN ci-dessus en cliquant sur <strong>Copier</strong>.</li>
+          <li>Accédez à <strong>redeem.hype.games</strong> (directement ci-dessous ou via le bouton).</li>
+          <li>Entrez votre ID Joueur Free Fire et collez votre code PIN pour recevoir vos diamants instantanément !</li>
         </ol>
       </div>
 
       {/* External Direct Link Button */}
       <div className="flex justify-end">
         <a
-          href="https://pin.wik.do/"
+          href="https://redeem.hype.games/"
           target="_blank"
           rel="noopener noreferrer"
-          className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-extrabold text-xs shadow-md transition-all"
+          className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white font-extrabold text-xs shadow-lg shadow-blue-900/30 transition-all active:scale-95"
         >
-          <span>Ouvrir https://pin.wik.do/ dans un nouvel onglet</span>
+          <span>Ouvrir https://redeem.hype.games/ dans un nouvel onglet</span>
           <ExternalLink className="w-4 h-4" />
         </a>
       </div>
@@ -115,8 +115,8 @@ export const RedeemPins: React.FC = () => {
       {/* Embedded Iframe wrapper */}
       <div className="relative rounded-3xl overflow-hidden border border-white/15 bg-slate-950 shadow-2xl">
         <iframe
-          src="https://pin.wik.do/"
-          title="Réclamer mes diamants Free Fire (pin.wik.do)"
+          src="https://redeem.hype.games/"
+          title="Réclamer mes diamants Free Fire (redeem.hype.games)"
           className="w-full h-[650px] sm:h-[800px] border-0"
           allow="clipboard-write; clipboard-read"
         />

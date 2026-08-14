@@ -191,7 +191,7 @@ export const MesCommandes: React.FC = () => {
                       className="w-full py-2.5 rounded-lg bg-emerald-500/15 hover:bg-emerald-500/25 border border-emerald-500/40 text-emerald-300 font-extrabold text-xs flex items-center justify-center gap-2 transition-colors"
                     >
                       <Gift className="w-4 h-4 text-amber-400" />
-                      Réclamer mes diamants sur pin.wik.do
+                      Réclamer mes diamants sur redeem.hype.games
                       <ExternalLink className="w-3.5 h-3.5" />
                     </button>
                   </div>

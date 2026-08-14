@@ -149,6 +149,13 @@ export const AdminDashboard: React.FC = () => {
   const [selectedDepositForNote, setSelectedDepositForNote] = useState<WalletDeposit | null>(null);
   const [modalDepositStatus, setModalDepositStatus] = useState<DepositStatus>('en_attente');
   const [modalAdminNote, setModalAdminNote] = useState('');
+  const [pendingConfirmDepositChange, setPendingConfirmDepositChange] = useState<{
+    id: string;
+    status: DepositStatus;
+    adminNote?: string;
+    amountHTG: number;
+    userEmail: string;
+  } | null>(null);
   const [zoomedImage, setZoomedImage] = useState<string | null>(null);
   const [copiedTxId, setCopiedTxId] = useState<string | null>(null);
 
@@ -545,7 +552,20 @@ export const AdminDashboard: React.FC = () => {
   };
 
   // Update Deposit Status
-  const handleUpdateDepositStatus = async (id: string, status: DepositStatus, adminNote?: string) => {
+  const handleUpdateDepositStatus = async (id: string, status: DepositStatus, adminNote?: string, forceConfirm = false) => {
+    // Check if deposit is already approved/validated and we are attempting to change its status to something else
+    const dep = deposits.find(d => String(d.id).trim() === String(id).trim() || String(d.transactionId14).trim() === String(id).trim());
+    if (dep && dep.status === 'valide' && status !== 'valide' && !forceConfirm) {
+      setPendingConfirmDepositChange({
+        id,
+        status,
+        adminNote,
+        amountHTG: dep.amountHTG,
+        userEmail: dep.userEmail
+      });
+      return;
+    }
+
     try {
       const res = await fetch(`/api/wallet/deposits/${encodeURIComponent(id)}`, {
         method: 'PUT',
@@ -558,6 +578,7 @@ export const AdminDashboard: React.FC = () => {
         await fetchUsersDetailed();
         setSelectedDepositForNote(null);
         setModalAdminNote('');
+        setPendingConfirmDepositChange(null);
       } else {
         const errData = await res.json();
         showToast(errData.error || 'Erreur lors de la mise à jour.', 'error');
@@ -2702,6 +2723,150 @@ export const AdminDashboard: React.FC = () => {
                 />
               </div>
 
+              {/* SUPABASE EMAIL TEMPLATE & BRANDING GUIDE */}
+              <div className="p-5 rounded-2xl bg-slate-900 border border-[#1E90FF]/30 space-y-4">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2 text-[#1E90FF] font-extrabold text-sm">
+                    <FileText className="w-5 h-5" />
+                    Personnalisation des Emails Supabase Auth (FRAYZEN SHOP)
+                  </div>
+                  <span className="px-2.5 py-0.5 rounded-full bg-blue-500/20 text-[#1E90FF] text-[10px] font-bold border border-blue-500/30">
+                    Template HTML Prêt
+                  </span>
+                </div>
+
+                <p className="text-xs text-slate-300 leading-relaxed">
+                  Pou chanje non expéditeur soti nan <em>supabase auth</em> pou mete <strong>FRAYZEN SHOP</strong>, logo sit la ak enstriksyon an kreyòl/fransè, ale nan Supabase Dashboard ou :
+                  <br />
+                  <strong className="text-white">Authentication → Email Templates → Confirm Signup</strong>.
+                </p>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+                  <div className="p-3 rounded-xl bg-slate-950/80 border border-slate-800 space-y-1">
+                    <span className="text-slate-400 text-[11px] font-bold">Sender Name (Nom de l'expéditeur) :</span>
+                    <p className="font-mono text-white font-bold">FRAYZEN SHOP</p>
+                  </div>
+                  <div className="p-3 rounded-xl bg-slate-950/80 border border-slate-800 space-y-1">
+                    <span className="text-slate-400 text-[11px] font-bold">Email Subject (Sujet) :</span>
+                    <p className="font-mono text-[#1E90FF] font-bold">FRAYZEN SHOP - Confirmez votre compte</p>
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-bold text-slate-300">Code HTML pour l'Email de Confirmation :</span>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const template = `<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>FRAYZEN SHOP - Confirmation de votre compte</title>
+</head>
+<body style="margin:0;padding:0;background-color:#070b14;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;color:#ffffff;">
+  <table width="100%" border="0" cellspacing="0" cellpadding="0" style="background-color:#070b14;padding:40px 15px;">
+    <tr>
+      <td align="center">
+        <!-- Main Container Card -->
+        <table width="100%" border="0" cellspacing="0" cellpadding="0" style="max-width:540px;background:linear-gradient(180deg, #0d1527 0%, #090d1a 100%);border-radius:28px;border:2px solid #1E90FF;box-shadow:0 20px 50px rgba(0,0,0,0.8), 0 0 30px rgba(30,144,255,0.25);overflow:hidden;">
+          
+          <!-- Top Accent Glowing Banner -->
+          <tr>
+            <td style="height:6px;background:linear-gradient(90deg, #1E90FF, #9333ea, #ec4899, #1E90FF);background-size:200% 200%;"></td>
+          </tr>
+
+          <!-- Header with Logo & Title -->
+          <tr>
+            <td align="center" style="padding:36px 24px 16px 24px;">
+              <div style="display:inline-block;padding:4px;border-radius:22px;background:linear-gradient(135deg, #1E90FF, #9333ea);box-shadow:0 0 20px rgba(30,144,255,0.4);">
+                <img src="https://frayzen-store.vercel.app/logo.jpeg" alt="FRAYZEN SHOP" width="80" height="80" style="border-radius:18px;display:block;object-fit:cover;" />
+              </div>
+              <h1 style="color:#ffffff;font-size:26px;font-weight:900;margin:16px 0 4px 0;letter-spacing:1px;text-transform:uppercase;">
+                FRAYZEN SHOP
+              </h1>
+              <p style="color:#1E90FF;font-size:12px;font-weight:800;margin:0;letter-spacing:1.5px;text-transform:uppercase;">
+                ⚡ Boutique Officielle Diamants Free Fire 💎
+              </p>
+            </td>
+          </tr>
+
+          <!-- Welcome & Information Section -->
+          <tr>
+            <td style="padding:10px 30px 20px 30px;">
+              <div style="background-color:#121c33;border:1px solid rgba(30,144,255,0.25);border-radius:20px;padding:24px;text-align:left;">
+                
+                <div style="display:inline-block;background-color:rgba(30,144,255,0.15);border:1px solid rgba(30,144,255,0.4);border-radius:20px;padding:4px 12px;margin-bottom:12px;">
+                  <span style="color:#1E90FF;font-size:11px;font-weight:bold;text-transform:uppercase;">👋 Byenvini sou platfòm nan</span>
+                </div>
+
+                <h2 style="color:#ffffff;font-size:18px;font-weight:800;margin:0 0 12px 0;">
+                  Aktive kont ou pou w ka kòmanse
+                </h2>
+                
+                <p style="color:#94a3b8;font-size:14px;line-height:1.6;margin:0 0 16px 0;">
+                  Mèsi paske w chwazi <strong>FRAYZEN SHOP</strong> pou tout rechaj ak kòd PIN Free Fire ou yo. Pou w ka sekirize tranzaksyon MonCash ak Natcash ou yo, tanpri klike sou bouton ble anba a pou w valide adrès email ou.
+                </p>
+
+                <!-- Security Box -->
+                <div style="background:rgba(15,23,42,0.8);border-left:3px solid #1E90FF;padding:12px 14px;border-radius:10px;">
+                  <p style="color:#e2e8f0;font-size:12px;line-height:1.5;margin:0;">
+                    🔒 <strong>Sekirite Garanti :</strong> Verifikasyon sa a pèmèt nou livre kòd PIN Free Fire ou yo an tout sekirite sou kont ou.
+                  </p>
+                </div>
+
+              </div>
+            </td>
+          </tr>
+
+          <!-- Confirmation Action Button -->
+          <tr>
+            <td align="center" style="padding:10px 30px 30px 30px;">
+              <table border="0" cellspacing="0" cellpadding="0" style="margin:auto;">
+                <tr>
+                  <td align="center" style="border-radius:16px;background:linear-gradient(135deg, #1E90FF 0%, #0066cc 100%);box-shadow:0 8px 25px rgba(30,144,255,0.5);">
+                    <a href="{{ .ConfirmationURL }}" target="_blank" style="font-size:15px;font-weight:900;color:#ffffff;text-decoration:none;padding:16px 36px;border-radius:16px;display:inline-block;letter-spacing:0.5px;">
+                      CONFIRMER MON COMPTE &rarr;
+                    </a>
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+
+          <!-- Footer Section -->
+          <tr>
+            <td align="center" style="padding:20px 30px 28px 30px;border-top:1px solid #17233d;background-color:#080d19;">
+              <p style="color:#64748b;font-size:12px;margin:0 0 6px 0;">
+                Sipò Kliyan WhatsApp : <strong style="color:#10b981;">+509 4135-5116</strong>
+              </p>
+              <p style="color:#475569;font-size:11px;margin:0;">
+                &copy; 2026 FRAYZEN SHOP - Tout dwa rezève.
+              </p>
+            </td>
+          </tr>
+
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>`;
+                        navigator.clipboard.writeText(template);
+                        showToast('Template HTML copié dans le presse-papier !', 'success');
+                      }}
+                      className="px-3 py-1 rounded-lg bg-[#1E90FF]/20 hover:bg-[#1E90FF]/30 text-[#1E90FF] border border-[#1E90FF]/40 text-xs font-bold flex items-center gap-1.5 transition-colors"
+                    >
+                      <Copy className="w-3.5 h-3.5" /> Copier le Template HTML
+                    </button>
+                  </div>
+                  <div className="p-3 rounded-xl bg-slate-950 font-mono text-[11px] text-slate-400 border border-slate-800 max-h-32 overflow-y-auto">
+                    {`<!DOCTYPE html> ... FRAYZEN SHOP Logo + Enstriksyon Kreyol + Bouton {{ .ConfirmationURL }}`}
+                  </div>
+                </div>
+              </div>
+
               <button
                 type="submit"
                 disabled={isSavingConfig}
@@ -3312,6 +3477,68 @@ export const AdminDashboard: React.FC = () => {
                 className="px-4 py-2.5 rounded-xl bg-[#1E90FF] hover:bg-blue-600 text-white text-xs font-extrabold shadow-md"
               >
                 Appliquer & Enregistrer
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL: CONFIRMATION CHANGE STATUS FOR APPROVED DEPOSIT */}
+      {pendingConfirmDepositChange && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md animate-in fade-in duration-200">
+          <div className="relative w-full max-w-md p-6 rounded-3xl glass-card border border-amber-500/40 shadow-2xl space-y-4 text-white text-center">
+            <button
+              onClick={() => setPendingConfirmDepositChange(null)}
+              className="absolute top-4 right-4 text-slate-400 hover:text-white p-1 rounded-lg bg-slate-800"
+            >
+              <X className="w-5 h-5" />
+            </button>
+
+            <div className="w-14 h-14 mx-auto rounded-2xl bg-amber-500/20 p-3 flex items-center justify-center border border-amber-500/40 text-amber-400">
+              <AlertCircle className="w-8 h-8" />
+            </div>
+
+            <h3 className="text-lg font-black text-amber-300">
+              Cette action est déjà approuvée !
+            </h3>
+
+            <p className="text-xs text-slate-300 leading-relaxed">
+              Ce dépôt de <strong className="text-emerald-400 font-bold">{pendingConfirmDepositChange.amountHTG} HTG</strong> (Client: <span className="text-blue-300">{pendingConfirmDepositChange.userEmail}</span>) a déjà été approuvé et crédité.
+            </p>
+
+            <div className="p-3.5 rounded-xl bg-slate-900/90 border border-amber-500/30 text-left text-xs space-y-1.5">
+              <p className="text-slate-300 font-medium">
+                Voulez-vous vraiment changer son statut en :
+              </p>
+              <p className="font-black text-amber-400 text-sm">
+                👉 {pendingConfirmDepositChange.status === 'manque_preuve' ? 'Preuve manquante' : pendingConfirmDepositChange.status === 'id_manquant' ? 'ID manquant' : pendingConfirmDepositChange.status === 'rejete' ? 'Rejeté' : pendingConfirmDepositChange.status === 'en_attente' ? 'En attente' : pendingConfirmDepositChange.status}
+              </p>
+              <p className="text-[11px] text-slate-400 italic pt-1 border-t border-slate-800">
+                ⚠️ Remarque: Si vous changez le statut, le montant de {pendingConfirmDepositChange.amountHTG} HTG sera automatiquement déduit du solde du client.
+              </p>
+            </div>
+
+            <div className="flex gap-2 pt-2">
+              <button
+                type="button"
+                onClick={() => setPendingConfirmDepositChange(null)}
+                className="flex-1 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-bold transition-all"
+              >
+                Annuler
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  handleUpdateDepositStatus(
+                    pendingConfirmDepositChange.id,
+                    pendingConfirmDepositChange.status,
+                    pendingConfirmDepositChange.adminNote,
+                    true
+                  );
+                }}
+                className="flex-1 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-600 text-black text-xs font-extrabold transition-all shadow-lg shadow-amber-500/20"
+              >
+                Oui, modifier le statut
               </button>
             </div>
           </div>

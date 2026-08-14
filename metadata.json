@@ -1,6 +1,7 @@
 {
   "name": "FRAYZEN SHOP",
-  "description": "Boutique en ligne gaming moderne pour la recharge de diamants Free Fire et cartes cadeaux via NATCASH",
+  "description": "Boutique en ligne gaming officielle pour la recharge instantanée de diamants Free Fire et cartes cadeaux par NATCASH, MonCash et Portefeuille Wallet en Haïti",
   "requestFramePermissions": [],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }
+

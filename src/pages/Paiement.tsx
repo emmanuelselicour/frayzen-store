@@ -14,7 +14,8 @@ export const Paiement: React.FC = () => {
     setIsVerifyModalOpen,
     setIsDepositModalOpen,
     natcashConfig,
-    submitOrder
+    submitOrder,
+    showToast
   } = useApp();
 
   const [currentProduct, setCurrentProduct] = useState(selectedProduct || products[0] || null);
@@ -77,13 +78,16 @@ export const Paiement: React.FC = () => {
 
     if (!gamePlayerId.trim()) {
       setErrorMsg('Veuillez saisir votre ID Joueur / ID de compte Free Fire.');
+      showToast('Veuillez saisir votre ID Joueur / ID de compte Free Fire.', 'error');
       return;
     }
 
     if (paymentMethod === 'natcash_direct' || paymentMethod === 'moncash_direct') {
       const cleaned = natcashTxId.replace(/\s+/g, '').trim();
       if (!cleaned || cleaned.length < 4) {
-        setErrorMsg(`Veuillez saisir un code de transaction ${paymentMethod === 'moncash_direct' ? 'MonCash' : 'NATCASH'} valide.`);
+        const msg = `Veuillez saisir un code de transaction ${paymentMethod === 'moncash_direct' ? 'MonCash' : 'NATCASH'} valide.`;
+        setErrorMsg(msg);
+        showToast(msg, 'error');
         return;
       }
     }
@@ -211,18 +215,18 @@ export const Paiement: React.FC = () => {
                 </button>
               </div>
 
-              {/* Redeem Button linking to pin.wik.do */}
+              {/* Redeem Button linking to redeem.hype.games */}
               <div className="pt-2 space-y-2">
                 <button
                   onClick={() => setActiveTab('redeempins')}
                   className="w-full py-3.5 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-600 hover:to-teal-700 text-white font-black text-xs sm:text-sm shadow-xl flex items-center justify-center gap-2 transform hover:scale-[1.02] transition-all"
                 >
                   <Gift className="w-5 h-5 text-amber-300" />
-                  Réclamer mes {activeProduct.name}
+                  Réclamer mes {activeProduct.name} (redeem.hype.games)
                   <ExternalLink className="w-4 h-4" />
                 </button>
                 <p className="text-[10px] text-slate-400">
-                  Cliquez sur le bouton ci-dessus pour accéder à <strong>pin.wik.do</strong> et charger directement vos diamants.
+                  Cliquez sur le bouton ci-dessus pour accéder à <strong>redeem.hype.games</strong> et charger directement vos diamants.
                 </p>
               </div>
 
