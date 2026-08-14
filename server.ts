@@ -23,6 +23,9 @@ import {
   syncAllPinsToSupabase,
   deletePinFromSupabase,
   signUpWithSupabaseAuth,
+  signInWithSupabaseAuth,
+  hashUserPassword,
+  verifyUserPassword,
   resendVerificationEmail,
   supabaseAdmin,
   isSupabaseServerConfigured,
@@ -479,10 +482,15 @@ app.post('/api/auth/login', async (req, res) => {
   try {
     const { emailOrPhone, password } = req.body || {};
     if (!emailOrPhone) {
-      return res.status(400).json({ error: 'Veuillez saisir votre email ou numéro de téléphone.' });
+      return res.status(400).json({ error: 'Veuillez saisir votre adresse email ou numéro de téléphone.' });
+    }
+
+    if (!password || !String(password).trim()) {
+      return res.status(400).json({ error: 'Veuillez saisir votre mot de passe pour vous connecter.' });
     }
 
     const query = String(emailOrPhone).toLowerCase().trim();
+    const cleanPassword = String(password).trim();
     const config = await fetchNatcashConfigFromSupabase();
     const activeAdminEmail = (config.adminEmail || natcashConfig.adminEmail || 'Junioradrien284@gmail.com').toLowerCase().trim();
     const activeAdminPassword = config.adminPassword || natcashConfig.adminPassword || '00009999';
@@ -516,14 +524,16 @@ app.post('/api/auth/login', async (req, res) => {
     }
 
     if (!user) {
-      return res.status(404).json({ error: 'Compte introuvable. Veuillez créer un compte FRAYZEN.' });
+      return res.status(404).json({
+        error: "Email ou mot de passe incorrect. Si vous n'avez pas de compte, veuillez en créer un."
+      });
     }
 
     const isAdmin = isExplicitAdminQuery || ADMIN_EMAILS.includes(user.email.toLowerCase().trim()) || user.isAdmin === true;
     
-    // Strict Admin Password Verification: Do NOT bypass password!
+    // Strict Admin Password Verification
     if (isAdmin) {
-      if (!password || String(password).trim() !== activeAdminPassword) {
+      if (cleanPassword !== activeAdminPassword) {
         return res.status(401).json({
           error: 'Mot de passe administrateur incorrect. Veuillez saisir le bon mot de passe (défaut: 00009999 ou celui configuré).'
         });
@@ -532,6 +542,36 @@ app.post('/api/auth/login', async (req, res) => {
       user.isEmailVerified = true;
       await syncUserToSupabase(user);
       return res.json(user);
+    }
+
+    // Strict Client Password Verification (Supabase Auth & Supabase DB Hash)
+    let isPasswordCorrect = false;
+
+    // 1. First, check with Supabase Auth if available
+    const authSignInResult = await signInWithSupabaseAuth(user.email, cleanPassword);
+    if (authSignInResult.success) {
+      isPasswordCorrect = true;
+      if (!user.passwordHash) {
+        user.passwordHash = hashUserPassword(cleanPassword);
+        user.password = user.passwordHash;
+        const uIdx = users.findIndex(u => u.email.toLowerCase() === user?.email.toLowerCase());
+        if (uIdx !== -1) {
+          users[uIdx].passwordHash = user.passwordHash;
+          users[uIdx].password = user.passwordHash;
+        }
+        saveDataStore();
+        syncUserToSupabase(user).catch(() => {});
+      }
+    } else if (user.passwordHash || user.password) {
+      // 2. Check with stored password hash from Supabase / datastore
+      isPasswordCorrect = verifyUserPassword(cleanPassword, user.passwordHash || user.password);
+    }
+
+    // Reject incorrect password
+    if (!isPasswordCorrect) {
+      return res.status(401).json({
+        error: "Mot de passe ou email incorrect. Si vous n'avez pas de compte, veuillez en créer un."
+      });
     }
 
     // Check if user has confirmed their email in Supabase Auth
@@ -577,6 +617,11 @@ app.post('/api/auth/register', async (req, res) => {
       return res.status(400).json({ error: 'Tous les champs (Nom, Email, Numéro) sont obligatoires.' });
     }
 
+    if (!password || String(password).trim().length < 4) {
+      return res.status(400).json({ error: 'Veuillez définir un mot de passe sécurisé (minimum 4 caractères).' });
+    }
+
+    const cleanPassword = String(password).trim();
     const config = await fetchNatcashConfigFromSupabase();
     const activeAdminEmail = (config.adminEmail || natcashConfig.adminEmail || 'Junioradrien284@gmail.com').toLowerCase().trim();
     const ADMIN_EMAILS = [
@@ -610,10 +655,13 @@ app.post('/api/auth/register', async (req, res) => {
         });
       }
 
-      return res.json({ requiresVerification: false, user: existingUser });
+      return res.status(400).json({
+        error: 'Un compte existe déjà avec cette adresse email. Veuillez vous connecter avec votre mot de passe.'
+      });
     }
 
     const isAdminUser = ADMIN_EMAILS.includes(normalizedEmail);
+    const passwordHashed = hashUserPassword(cleanPassword);
 
     const newUser: UserProfile = {
       id: `usr-${Date.now()}`,
@@ -623,7 +671,9 @@ app.post('/api/auth/register', async (req, res) => {
       createdAt: new Date().toISOString(),
       isEmailVerified: isAdminUser ? true : false,
       walletBalanceHTG: 0,
-      isAdmin: isAdminUser
+      isAdmin: isAdminUser,
+      passwordHash: passwordHashed,
+      password: passwordHashed
     };
 
     users.push(newUser);
@@ -631,7 +681,7 @@ app.post('/api/auth/register', async (req, res) => {
 
     try {
       await syncUserToSupabase(newUser);
-      await signUpWithSupabaseAuth(newUser.email, newUser.name, newUser.phone, password);
+      await signUpWithSupabaseAuth(newUser.email, newUser.name, newUser.phone, cleanPassword);
     } catch (e) {
       console.error('Supabase async trigger exception:', e);
     }

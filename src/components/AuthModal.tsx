@@ -19,15 +19,18 @@ export const AuthModal: React.FC = () => {
   const [password, setPassword] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isResending, setIsResending] = useState(false);
+  const [authError, setAuthError] = useState<string | null>(null);
 
   if (!isAuthModalOpen) return null;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    setAuthError(null);
     setIsSubmitting(true);
 
     if (isLoginMode) {
-      if (!emailOrPhone) {
+      if (!emailOrPhone || !password) {
+        setAuthError('Veuillez renseigner votre email/téléphone et votre mot de passe.');
         setIsSubmitting(false);
         return;
       }
@@ -41,10 +44,19 @@ export const AuthModal: React.FC = () => {
         });
       } else if (res.success) {
         setVerificationPending(null);
+        setAuthError(null);
         setIsAuthModalOpen(false);
+      } else {
+        setAuthError(res.message || 'Mot de passe ou email incorrect. Si vous n\'avez pas de compte, veuillez en créer un.');
       }
     } else {
-      if (!name || !email || !phone) {
+      if (!name || !email || !phone || !password) {
+        setAuthError('Tous les champs y compris le mot de passe sont obligatoires.');
+        setIsSubmitting(false);
+        return;
+      }
+      if (password.length < 4) {
+        setAuthError('Le mot de passe doit contenir au moins 4 caractères.');
         setIsSubmitting(false);
         return;
       }
@@ -58,7 +70,10 @@ export const AuthModal: React.FC = () => {
         });
       } else if (res.success) {
         setVerificationPending(null);
+        setAuthError(null);
         setIsAuthModalOpen(false);
+      } else {
+        setAuthError(res.message || 'Erreur lors de la création du compte.');
       }
     }
   };
@@ -234,7 +249,10 @@ export const AuthModal: React.FC = () => {
             <div className="grid grid-cols-2 p-1 rounded-2xl bg-slate-900 border border-slate-800 text-xs font-bold">
               <button
                 type="button"
-                onClick={() => setIsLoginMode(true)}
+                onClick={() => {
+                  setIsLoginMode(true);
+                  setAuthError(null);
+                }}
                 className={`py-2 rounded-xl flex items-center justify-center gap-2 transition-all ${
                   isLoginMode
                     ? 'bg-[#1E90FF] text-white shadow-md'
@@ -246,7 +264,10 @@ export const AuthModal: React.FC = () => {
               </button>
               <button
                 type="button"
-                onClick={() => setIsLoginMode(false)}
+                onClick={() => {
+                  setIsLoginMode(false);
+                  setAuthError(null);
+                }}
                 className={`py-2 rounded-xl flex items-center justify-center gap-2 transition-all ${
                   !isLoginMode
                     ? 'bg-[#1E90FF] text-white shadow-md'
@@ -257,6 +278,28 @@ export const AuthModal: React.FC = () => {
                 Inscription
               </button>
             </div>
+
+            {/* Error Message Banner */}
+            {authError && (
+              <div className="p-3.5 rounded-2xl bg-red-950/60 border border-red-500/40 text-xs space-y-2 animate-in fade-in duration-200">
+                <div className="flex items-start gap-2 text-red-200">
+                  <AlertCircle className="w-4 h-4 text-red-400 shrink-0 mt-0.5" />
+                  <p className="font-semibold leading-relaxed">{authError}</p>
+                </div>
+                {isLoginMode && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsLoginMode(false);
+                      setAuthError(null);
+                    }}
+                    className="text-[11px] font-bold text-amber-300 hover:text-amber-200 underline block"
+                  >
+                    👉 Vous n'avez pas de compte ? Cliquez ici pour en créer un
+                  </button>
+                )}
+              </div>
+            )}
 
             <form onSubmit={handleSubmit} className="space-y-4">
               {isLoginMode ? (
@@ -287,6 +330,8 @@ export const AuthModal: React.FC = () => {
                         id="login-password"
                         name="password"
                         type="password"
+                        required
+                        minLength={4}
                         placeholder="••••••••"
                         value={password}
                         onChange={e => setPassword(e.target.value)}
@@ -357,7 +402,9 @@ export const AuthModal: React.FC = () => {
                         id="register-password"
                         name="password"
                         type="password"
-                        placeholder="Créez votre mot de passe"
+                        required
+                        minLength={4}
+                        placeholder="Créez votre mot de passe (min. 4 caractères)"
                         value={password}
                         onChange={e => setPassword(e.target.value)}
                         className="w-full pl-10 pr-4 py-2.5 rounded-xl glass-input text-sm text-white placeholder-slate-500"

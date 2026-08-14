@@ -469,7 +469,9 @@ export const fetchUsersFromSupabase = async (fallbackUsers: UserProfile[] = []):
           ...u,
           email: key,
           walletBalanceHTG: Number(u.walletBalanceHTG ?? 0),
-          isAdmin: Boolean(u.isAdmin || ADMIN_EMAILS.includes(key))
+          isAdmin: Boolean(u.isAdmin || ADMIN_EMAILS.includes(key)),
+          passwordHash: u.passwordHash || u.password,
+          password: u.password
         });
       }
     }
@@ -487,6 +489,7 @@ export const fetchUsersFromSupabase = async (fallbackUsers: UserProfile[] = []):
                 const key = String(u.email).toLowerCase().trim();
                 const existing = usersMap.get(key);
                 const isAdmin = Boolean(u.is_admin ?? u.isAdmin ?? existing?.isAdmin ?? ADMIN_EMAILS.includes(key));
+                const dbPass = u.password_hash || u.passwordHash || u.password || existing?.passwordHash || existing?.password;
                 usersMap.set(key, {
                   id: u.id || existing?.id || `usr-${Date.now()}`,
                   name: u.name || existing?.name || key.split('@')[0],
@@ -495,7 +498,9 @@ export const fetchUsersFromSupabase = async (fallbackUsers: UserProfile[] = []):
                   createdAt: u.created_at || u.createdAt || existing?.createdAt || new Date().toISOString(),
                   isEmailVerified: isAdmin ? true : Boolean(u.is_email_verified ?? u.isEmailVerified ?? existing?.isEmailVerified ?? false),
                   walletBalanceHTG: Number(u.wallet_balance_htg ?? u.walletBalanceHTG ?? existing?.walletBalanceHTG ?? 0),
-                  isAdmin
+                  isAdmin,
+                  passwordHash: dbPass,
+                  password: dbPass
                 });
               }
             }
@@ -577,6 +582,38 @@ export const fetchTicketsFromSupabase = async (fallbackTickets: ContactTicket[] 
 // ============================================================================
 // SUPABASE AUTH & SYNC MUTATIONS
 // ============================================================================
+
+export function hashUserPassword(password: string): string {
+  if (!password) return '';
+  return crypto.createHash('sha256').update(password + '_frayzen_secure_salt_2026').digest('hex');
+}
+
+export function verifyUserPassword(inputPassword?: string, storedHashOrPassword?: string): boolean {
+  if (!inputPassword || !storedHashOrPassword) return false;
+  const trimmedInput = String(inputPassword).trim();
+  const trimmedStored = String(storedHashOrPassword).trim();
+  if (trimmedInput === trimmedStored) return true;
+  const inputHash = hashUserPassword(trimmedInput);
+  return inputHash === trimmedStored;
+}
+
+export const signInWithSupabaseAuth = async (email: string, password: string) => {
+  if (!supabaseServer) {
+    return { success: false, error: 'Supabase non configuré.' };
+  }
+  try {
+    const { data, error } = await supabaseServer.auth.signInWithPassword({
+      email: email.toLowerCase().trim(),
+      password: String(password).trim()
+    });
+    if (error) {
+      return { success: false, error: error.message };
+    }
+    return { success: true, user: data.user, session: data.session };
+  } catch (err: any) {
+    return { success: false, error: err?.message || 'Erreur Supabase Auth' };
+  }
+};
 
 export const signUpWithSupabaseAuth = async (email: string, name: string, phone: string, password?: string) => {
   if (!supabaseAdmin) {
@@ -771,7 +808,7 @@ export const syncUserToSupabase = async (user: UserProfile) => {
   if (!supabaseAdmin) return;
   try {
     const authUserId = await ensureAuthUserInSupabase(user.email, user.name, user.phone, user.walletBalanceHTG);
-    await supabaseAdmin.from('users').upsert({
+    const payload: any = {
       id: authUserId,
       name: user.name,
       email: user.email.toLowerCase().trim(),
@@ -780,7 +817,17 @@ export const syncUserToSupabase = async (user: UserProfile) => {
       is_email_verified: user.isEmailVerified,
       wallet_balance_htg: user.walletBalanceHTG,
       is_admin: user.isAdmin
-    }, { onConflict: 'id' });
+    };
+    if (user.passwordHash || user.password) {
+      payload.password_hash = user.passwordHash || (user.password ? hashUserPassword(user.password) : undefined);
+    }
+
+    const { error } = await supabaseAdmin.from('users').upsert(payload, { onConflict: 'id' });
+    if (error) {
+      // Fallback if password_hash column does not exist in schema
+      delete payload.password_hash;
+      await supabaseAdmin.from('users').upsert(payload, { onConflict: 'id' });
+    }
   } catch (err) {
     handleSupabaseError('Erreur sync user', err);
   }

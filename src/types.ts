@@ -79,6 +79,8 @@ export interface UserProfile {
   isEmailVerified: boolean;
   walletBalanceHTG: number;
   isAdmin?: boolean;
+  passwordHash?: string;
+  password?: string;
 }
 
 export interface ContactTicket {
