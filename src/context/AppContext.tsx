@@ -32,6 +32,8 @@ interface AppContextType {
   refreshData: () => Promise<void>;
   registerUser: (name: string, email: string, phone: string, password?: string) => Promise<{ success: boolean; requiresVerification?: boolean; email?: string; name?: string; message?: string }>;
   loginUser: (emailOrPhone: string, password?: string) => Promise<{ success: boolean; requiresVerification?: boolean; email?: string; name?: string; message?: string }>;
+  resetPassword: (emailOrPhone: string, newPassword: string) => Promise<{ success: boolean; message?: string }>;
+  sendResetEmail: (email: string) => Promise<{ success: boolean; message?: string }>;
   verifyUserEmail: (email: string) => Promise<boolean>;
   resendVerification: (email: string) => Promise<boolean>;
   submitDeposit: (transactionId14: string, amountHTG: number, screenshotUrl?: string, paymentMethod?: 'natcash' | 'moncash') => Promise<boolean>;
@@ -424,6 +426,46 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
   };
 
+  const resetPassword = async (emailOrPhone: string, newPassword: string): Promise<{ success: boolean; message?: string }> => {
+    try {
+      const res = await fetch('/api/auth/reset-password', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ emailOrPhone, newPassword })
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        showToast(data.error || 'Erreur lors de la réinitialisation.', 'error');
+        return { success: false, message: data.error };
+      }
+      showToast(data.message || 'Mot de passe réinitialisé avec succès !', 'success');
+      return { success: true, message: data.message };
+    } catch {
+      showToast('Erreur serveur lors de la réinitialisation.', 'error');
+      return { success: false, message: 'Erreur réseau ou serveur.' };
+    }
+  };
+
+  const sendResetEmail = async (email: string): Promise<{ success: boolean; message?: string }> => {
+    try {
+      const res = await fetch('/api/auth/send-reset-email', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email })
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        showToast(data.error || 'Erreur lors de l\'envoi de l\'email.', 'error');
+        return { success: false, message: data.error };
+      }
+      showToast(data.message || 'Email de réinitialisation envoyé !', 'success');
+      return { success: true, message: data.message };
+    } catch {
+      showToast('Erreur réseau lors de l\'envoi.', 'error');
+      return { success: false, message: 'Erreur réseau.' };
+    }
+  };
+
   const verifyUserEmail = async (email: string): Promise<boolean> => {
     try {
       const res = await fetch('/api/auth/verify-email', {
@@ -610,6 +652,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       refreshData,
       registerUser,
       loginUser,
+      resetPassword,
+      sendResetEmail,
       verifyUserEmail,
       resendVerification,
       submitDeposit,

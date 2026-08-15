@@ -671,6 +671,61 @@ export const resendVerificationEmail = async (email: string) => {
   }
 };
 
+export const resetUserPasswordInSupabase = async (email: string, newPassword: string) => {
+  if (!supabaseAdmin) {
+    return { success: false, error: 'Supabase non configuré.' };
+  }
+  try {
+    const targetEmail = email.toLowerCase().trim();
+    const cleanPassword = String(newPassword).trim();
+    const hashed = hashUserPassword(cleanPassword);
+
+    // 1. Update in Supabase Auth if user exists
+    const { data: listData } = await supabaseAdmin.auth.admin.listUsers();
+    const authUser = listData?.users?.find(
+      (u: any) => u.email?.toLowerCase().trim() === targetEmail
+    );
+
+    if (authUser) {
+      const { error: updateErr } = await supabaseAdmin.auth.admin.updateUserById(authUser.id, {
+        password: cleanPassword
+      });
+      if (updateErr) {
+        console.warn('[Supabase Auth update user password warning]:', updateErr.message);
+      }
+    }
+
+    // 2. Update in public.users table
+    try {
+      await supabaseAdmin.from('users').update({
+        password_hash: hashed
+      }).ilike('email', targetEmail);
+    } catch (dbErr) {
+      console.warn('[Supabase DB password update warning]:', dbErr);
+    }
+
+    return { success: true, passwordHash: hashed };
+  } catch (err: any) {
+    return { success: false, error: err?.message || 'Erreur lors de la réinitialisation du mot de passe.' };
+  }
+};
+
+export const sendPasswordResetEmail = async (email: string) => {
+  if (!supabaseAdmin) {
+    return { success: false, error: 'Supabase non configuré.' };
+  }
+  try {
+    const targetEmail = email.toLowerCase().trim();
+    const { error } = await supabaseAdmin.auth.resetPasswordForEmail(targetEmail);
+    if (error) {
+      return { success: false, error: error.message };
+    }
+    return { success: true, message: `Lien de réinitialisation envoyé à ${targetEmail}.` };
+  } catch (err: any) {
+    return { success: false, error: err?.message || 'Erreur lors de l\'envoi de l\'email de réinitialisation.' };
+  }
+};
+
 // Helper to generate or format deterministic UUID
 export function toUuid(idStr?: string): string {
   if (!idStr) return crypto.randomUUID();

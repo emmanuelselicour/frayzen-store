@@ -1,10 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import { useApp } from '../context/AppContext';
 import { Product, WalletDeposit, ContactTicket, UserProfile, AdminStats, UserDetailedMetrics, DepositStatus, Order } from '../types';
-import { Shield, LayoutDashboard, ShoppingBag, Wallet, Settings, MessageSquare, Plus, Trash2, Edit3, CheckCircle2, XCircle, AlertCircle, Save, Users, Award, RefreshCw, KeyRound, Lock, Eye, EyeOff, ArrowLeft, Flame, DollarSign, UserCheck, X, ShieldAlert, CreditCard, Calendar, Clock, Search, Filter, FileText, Check, Copy, Image as ImageIcon, Package, User, ShieldCheck } from 'lucide-react';
+import { Shield, LayoutDashboard, ShoppingBag, Wallet, Settings, MessageSquare, Plus, Trash2, Edit3, CheckCircle2, XCircle, AlertCircle, Save, Users, Award, RefreshCw, KeyRound, Lock, Eye, EyeOff, ArrowLeft, Flame, DollarSign, UserCheck, X, ShieldAlert, CreditCard, Calendar, Clock, Search, Filter, FileText, Check, Copy, Image as ImageIcon, Package, User, ShieldCheck, Mail, ExternalLink, Code, Send, Sparkles, Smartphone, Monitor } from 'lucide-react';
 import { ScrollReveal } from '../components/ScrollReveal';
+import { SUPABASE_RESET_PASSWORD_TEMPLATE_HTML, SUPABASE_CONFIRM_SIGNUP_TEMPLATE_HTML, generateResetPasswordEmailHtml, generateConfirmSignupEmailHtml } from '../utils/emailTemplates';
 
-type AdminTab = 'stats' | 'produits' | 'pins' | 'commandes' | 'wallet' | 'config' | 'users' | 'contact';
+type AdminTab = 'stats' | 'produits' | 'pins' | 'commandes' | 'wallet' | 'config' | 'users' | 'contact' | 'emails';
 
 export const AdminDashboard: React.FC = () => {
   const {
@@ -242,6 +243,24 @@ export const AdminDashboard: React.FC = () => {
   const [isConfigPinModalOpen, setIsConfigPinModalOpen] = useState(false);
   const [configPinInput, setConfigPinInput] = useState('');
   const [configPinError, setConfigPinError] = useState('');
+
+  // Email Templates Management & Live Customization State
+  const [emailTemplateType, setEmailTemplateType] = useState<'reset' | 'confirm'>('reset');
+  const [emailDeviceView, setEmailDeviceView] = useState<'desktop' | 'mobile'>('desktop');
+  const [testEmailInput, setTestEmailInput] = useState('emmanuelselicour.2002@gmail.com');
+  const [isSendingTestEmail, setIsSendingTestEmail] = useState(false);
+  const [hasCopiedTemplate, setHasCopiedTemplate] = useState(false);
+
+  // Email Live Personalization Fields
+  const [emailStoreName, setEmailStoreName] = useState('⚡ FRAYZEN SHOP');
+  const [emailTagline, setEmailTagline] = useState('Recharge Diamants & Cartes Cadeaux Haïti');
+  const [emailPrimaryColor, setEmailPrimaryColor] = useState('#1E90FF');
+  const [emailSecondaryColor, setEmailSecondaryColor] = useState('#0052CC');
+  const [emailHeaderBadge, setEmailHeaderBadge] = useState('🔒 SÉCURITÉ DU COMPTE');
+  const [emailWhatsapp1, setEmailWhatsapp1] = useState('+509 4712 4969');
+  const [emailWhatsapp2, setEmailWhatsapp2] = useState('+509 3788 2211');
+  const [emailCustomNote, setEmailCustomNote] = useState('FRAYZEN SHOP pap janm mande w modpas ou ni kòd sekrè w sou WhatsApp.');
+  const [isCustomizingEmail, setIsCustomizingEmail] = useState(false);
 
   const formatFullDateTime = (dateStr: string) => {
     if (!dateStr) return 'N/A';
@@ -925,6 +944,23 @@ export const AdminDashboard: React.FC = () => {
                 {tickets.filter(t => t.status === 'nouveau').length}
               </span>
             )}
+          </button>
+
+          <button
+            onClick={() => setActiveAdminTab('emails')}
+            className={`w-full p-3.5 rounded-2xl text-xs font-bold flex items-center justify-between transition-all ${
+              activeAdminTab === 'emails'
+                ? 'bg-[#1E90FF] text-white shadow-md shadow-blue-500/20'
+                : 'glass-card text-slate-300 hover:bg-slate-900 hover:text-white border border-white/10'
+            }`}
+          >
+            <div className="flex items-center gap-3">
+              <Mail className="w-4 h-4 text-cyan-400" />
+              <span>Emails & Modèles Supabase</span>
+            </div>
+            <span className="px-2 py-0.5 rounded-full bg-cyan-500/20 text-cyan-400 text-[10px] font-bold">
+              HTML
+            </span>
           </button>
 
         </div>
@@ -3402,6 +3438,499 @@ export const AdminDashboard: React.FC = () => {
               )}
             </div>
           )}
+
+          {/* TAB 9: EMAILS & MODÈLES SUPABASE CUSTOM */}
+          {activeAdminTab === 'emails' && (() => {
+            const currentEmailOptions = {
+              storeName: emailStoreName,
+              tagline: emailTagline,
+              primaryColor: emailPrimaryColor,
+              secondaryColor: emailSecondaryColor,
+              whatsapp1: emailWhatsapp1 || natcashConfig.whatsappNumber || '+509 4712 4969',
+              whatsapp2: emailWhatsapp2 || natcashConfig.moncashNumber || '+509 3788 2211',
+              headerBadge: emailHeaderBadge,
+              customNote: emailCustomNote
+            };
+
+            const currentGeneratedHtml = emailTemplateType === 'reset'
+              ? generateResetPasswordEmailHtml(currentEmailOptions)
+              : generateConfirmSignupEmailHtml(currentEmailOptions);
+
+            const COLOR_PRESETS = [
+              { name: 'Bleu Électrique (FRAYZEN)', primary: '#1E90FF', secondary: '#0052CC', bg: 'bg-[#1E90FF]' },
+              { name: 'Cyan Neon / Cyber', primary: '#06B6D4', secondary: '#0284C7', bg: 'bg-cyan-500' },
+              { name: 'Vert Émeraude / Diamants', primary: '#10B981', secondary: '#059669', bg: 'bg-emerald-500' },
+              { name: 'Violet Gaming / VIP', primary: '#8B5CF6', secondary: '#6D28D9', bg: 'bg-purple-500' },
+              { name: 'Or & Feu / Gold', primary: '#F59E0B', secondary: '#D97706', bg: 'bg-amber-500' },
+              { name: 'Rouge Crimson / Feu', primary: '#EF4444', secondary: '#B91C1C', bg: 'bg-red-500' },
+            ];
+
+            return (
+              <div className="space-y-6">
+                {/* Header Title */}
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-white/10">
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <span className="px-3 py-1 rounded-full bg-cyan-500/20 text-cyan-400 font-extrabold text-[11px] uppercase tracking-wider border border-cyan-500/30">
+                        ⚡ Supabase Auth Branding
+                      </span>
+                      <span className="px-2.5 py-1 rounded-full bg-emerald-500/20 text-emerald-400 font-bold text-[10px]">
+                        100% Pèsonalize
+                      </span>
+                    </div>
+                    <h2 className="text-xl sm:text-2xl font-black text-white mt-1">
+                      📧 Pèsonalizasyon Modèl Email (Supabase)
+                    </h2>
+                    <p className="text-xs text-slate-300 max-w-2xl mt-0.5">
+                      Pèsonalize koulè, non, kontak WhatsApp ak mesaj email réinitialisation mot de passe la pou <strong>FRAYZEN SHOP</strong>, kopye kòd la epi kole l nan Supabase.
+                    </p>
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setIsCustomizingEmail(!isCustomizingEmail)}
+                      className={`px-4 py-2.5 rounded-xl font-extrabold text-xs flex items-center gap-2 border transition-all shadow-md ${
+                        isCustomizingEmail
+                          ? 'bg-cyan-500 text-black border-cyan-400 ring-2 ring-cyan-400/30'
+                          : 'bg-slate-800 hover:bg-slate-700 text-cyan-300 border-cyan-500/30 hover:border-cyan-500'
+                      }`}
+                    >
+                      <Sparkles className="w-4 h-4" />
+                      <span>{isCustomizingEmail ? 'Kache Pèsonalizè a' : '🎨 Louvri Pèsonalizè Modèl la'}</span>
+                    </button>
+                    <a
+                      href={`/api/admin/email-templates/preview/${emailTemplateType === 'reset' ? 'reset' : 'confirm'}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="px-3.5 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-bold flex items-center gap-1.5 border border-slate-700 transition-all shadow-sm"
+                      title="Ouvri aperçu nan yon nouvo onglet"
+                    >
+                      <ExternalLink className="w-3.5 h-3.5 text-cyan-400" />
+                      Aperçu Plein Écran
+                    </a>
+                  </div>
+                </div>
+
+                {/* INTERACTIVE CUSTOMIZER PANEL */}
+                {isCustomizingEmail && (
+                  <div className="p-5 sm:p-6 rounded-3xl bg-gradient-to-br from-slate-900 via-slate-950 to-blue-950/40 border border-cyan-500/30 shadow-2xl space-y-5 animate-in fade-in duration-200">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-white/10">
+                      <div className="flex items-center gap-2.5">
+                        <div className="w-8 h-8 rounded-xl bg-cyan-500/20 border border-cyan-500/40 flex items-center justify-center text-cyan-300">
+                          <Settings className="w-4 h-4" />
+                        </div>
+                        <div>
+                          <h3 className="text-sm font-black text-white">🎨 Pèsonalize Tèm & Tèks Email la an Dirèk</h3>
+                          <p className="text-[11px] text-slate-400">Tout chanjman ou fè la yo ap parèt nan aperçu a otomatikman epi kòd HTML la ap mete ajou.</p>
+                        </div>
+                      </div>
+
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setEmailStoreName('⚡ FRAYZEN SHOP');
+                          setEmailTagline('Recharge Diamants & Cartes Cadeaux Haïti');
+                          setEmailPrimaryColor('#1E90FF');
+                          setEmailSecondaryColor('#0052CC');
+                          setEmailHeaderBadge('🔒 SÉCURITÉ DU COMPTE');
+                          setEmailWhatsapp1(natcashConfig.whatsappNumber || '+509 4712 4969');
+                          setEmailWhatsapp2(natcashConfig.moncashNumber || '+509 3788 2211');
+                          setEmailCustomNote('FRAYZEN SHOP pap janm mande w modpas ou ni kòd sekrè w sou WhatsApp.');
+                          showToast('Valè pa defo yo retabli !', 'info');
+                        }}
+                        className="px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-bold flex items-center gap-1.5 border border-slate-700 transition-colors self-start sm:self-auto"
+                      >
+                        <RefreshCw className="w-3.5 h-3.5" />
+                        <span>Retabli Valè Pa Defo</span>
+                      </button>
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 text-xs">
+                      {/* Store Name */}
+                      <div className="space-y-1.5">
+                        <label className="font-extrabold text-slate-300 flex items-center gap-1.5">
+                          <span>Non Boutik la (Titre En-tête) :</span>
+                        </label>
+                        <input
+                          type="text"
+                          value={emailStoreName}
+                          onChange={(e) => setEmailStoreName(e.target.value)}
+                          className="w-full px-3 py-2 rounded-xl bg-slate-900 border border-slate-700 text-white font-bold focus:outline-none focus:border-cyan-400"
+                          placeholder="⚡ FRAYZEN SHOP"
+                        />
+                      </div>
+
+                      {/* Tagline */}
+                      <div className="space-y-1.5">
+                        <label className="font-extrabold text-slate-300 flex items-center gap-1.5">
+                          <span>Slogan / Sou-titre :</span>
+                        </label>
+                        <input
+                          type="text"
+                          value={emailTagline}
+                          onChange={(e) => setEmailTagline(e.target.value)}
+                          className="w-full px-3 py-2 rounded-xl bg-slate-900 border border-slate-700 text-white focus:outline-none focus:border-cyan-400"
+                          placeholder="Recharge Diamants & Cartes Cadeaux Haïti"
+                        />
+                      </div>
+
+                      {/* Header Badge */}
+                      <div className="space-y-1.5">
+                        <label className="font-extrabold text-slate-300 flex items-center gap-1.5">
+                          <span>Ti Badge nan Kò Email la :</span>
+                        </label>
+                        <input
+                          type="text"
+                          value={emailHeaderBadge}
+                          onChange={(e) => setEmailHeaderBadge(e.target.value)}
+                          className="w-full px-3 py-2 rounded-xl bg-slate-900 border border-slate-700 text-cyan-300 font-bold focus:outline-none focus:border-cyan-400"
+                          placeholder="🔒 SÉCURITÉ DU COMPTE"
+                        />
+                      </div>
+
+                      {/* WhatsApp 1 */}
+                      <div className="space-y-1.5">
+                        <label className="font-extrabold text-slate-300 flex items-center gap-1.5">
+                          <span>Nimewo WhatsApp Sipò 1 :</span>
+                        </label>
+                        <input
+                          type="text"
+                          value={emailWhatsapp1}
+                          onChange={(e) => setEmailWhatsapp1(e.target.value)}
+                          className="w-full px-3 py-2 rounded-xl bg-slate-900 border border-slate-700 text-emerald-400 font-mono font-bold focus:outline-none focus:border-cyan-400"
+                          placeholder="+509 4712 4969"
+                        />
+                      </div>
+
+                      {/* WhatsApp 2 */}
+                      <div className="space-y-1.5">
+                        <label className="font-extrabold text-slate-300 flex items-center gap-1.5">
+                          <span>Nimewo WhatsApp Sipò 2 :</span>
+                        </label>
+                        <input
+                          type="text"
+                          value={emailWhatsapp2}
+                          onChange={(e) => setEmailWhatsapp2(e.target.value)}
+                          className="w-full px-3 py-2 rounded-xl bg-slate-900 border border-slate-700 text-emerald-400 font-mono font-bold focus:outline-none focus:border-cyan-400"
+                          placeholder="+509 3788 2211"
+                        />
+                      </div>
+
+                      {/* Color Palette Selector */}
+                      <div className="space-y-1.5">
+                        <label className="font-extrabold text-slate-300">
+                          Koulè Prensipal Tèm nan :
+                        </label>
+                        <div className="flex items-center gap-2">
+                          <input
+                            type="color"
+                            value={emailPrimaryColor}
+                            onChange={(e) => setEmailPrimaryColor(e.target.value)}
+                            className="w-9 h-9 rounded-xl border border-slate-700 bg-slate-900 cursor-pointer p-0.5"
+                          />
+                          <input
+                            type="text"
+                            value={emailPrimaryColor}
+                            onChange={(e) => setEmailPrimaryColor(e.target.value)}
+                            className="w-24 px-2 py-2 rounded-xl bg-slate-900 border border-slate-700 text-white font-mono uppercase text-center focus:outline-none focus:border-cyan-400"
+                          />
+                          <span className="text-[11px] text-slate-400">Palèt Koulè</span>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Color Presets */}
+                    <div className="space-y-2 pt-2 border-t border-white/5">
+                      <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">
+                        Chwazi yon tèm rapid :
+                      </span>
+                      <div className="flex flex-wrap gap-2">
+                        {COLOR_PRESETS.map((preset) => (
+                          <button
+                            key={preset.name}
+                            type="button"
+                            onClick={() => {
+                              setEmailPrimaryColor(preset.primary);
+                              setEmailSecondaryColor(preset.secondary);
+                            }}
+                            className={`px-3 py-1.5 rounded-xl text-[11px] font-extrabold flex items-center gap-2 border transition-all ${
+                              emailPrimaryColor.toLowerCase() === preset.primary.toLowerCase()
+                                ? 'border-white bg-slate-800 text-white ring-2 ring-white/20'
+                                : 'border-slate-800 bg-slate-950 text-slate-400 hover:text-white'
+                            }`}
+                          >
+                            <span className={`w-3 h-3 rounded-full ${preset.bg}`} />
+                            <span>{preset.name}</span>
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* Custom Security Note */}
+                    <div className="space-y-1.5 pt-2 border-t border-white/5">
+                      <label className="font-extrabold text-slate-300 flex items-center gap-1.5">
+                        <span>Nòt / Mesaj Sekirite nan pye email la :</span>
+                      </label>
+                      <textarea
+                        rows={2}
+                        value={emailCustomNote}
+                        onChange={(e) => setEmailCustomNote(e.target.value)}
+                        className="w-full px-3 py-2 rounded-xl bg-slate-900 border border-slate-700 text-amber-300 font-medium focus:outline-none focus:border-cyan-400 text-xs"
+                        placeholder="FRAYZEN SHOP pap janm mande w modpas ou ni kòd sekrè w sou WhatsApp."
+                      />
+                    </div>
+                  </div>
+                )}
+
+                {/* Template Selector Tabs */}
+                <div className="flex flex-wrap gap-2 p-1.5 bg-slate-950/80 rounded-2xl border border-white/10">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setEmailTemplateType('reset');
+                      setHasCopiedTemplate(false);
+                    }}
+                    className={`flex-1 min-w-[200px] py-3 px-4 rounded-xl text-xs font-black flex items-center justify-center gap-2.5 transition-all ${
+                      emailTemplateType === 'reset'
+                        ? 'bg-gradient-to-r from-[#1E90FF] to-blue-600 text-white shadow-lg shadow-blue-500/30 ring-1 ring-white/20'
+                        : 'text-slate-400 hover:text-white hover:bg-slate-900'
+                    }`}
+                  >
+                    <Lock className="w-4 h-4" />
+                    <span>1. Reset Password (Modpas Oublye)</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setEmailTemplateType('confirm');
+                      setHasCopiedTemplate(false);
+                    }}
+                    className={`flex-1 min-w-[200px] py-3 px-4 rounded-xl text-xs font-black flex items-center justify-center gap-2.5 transition-all ${
+                      emailTemplateType === 'confirm'
+                        ? 'bg-gradient-to-r from-emerald-600 to-teal-600 text-white shadow-lg shadow-emerald-500/30 ring-1 ring-white/20'
+                        : 'text-slate-400 hover:text-white hover:bg-slate-900'
+                    }`}
+                  >
+                    <CheckCircle2 className="w-4 h-4" />
+                    <span>2. Confirm Signup (Konfime Kont)</span>
+                  </button>
+                </div>
+
+                {/* Step-by-Step Instructions for Supabase */}
+                <div className="p-5 rounded-3xl bg-gradient-to-br from-blue-950/40 via-slate-900 to-slate-950 border border-blue-500/30 shadow-xl space-y-4">
+                  <div className="flex items-center gap-2 text-sm font-black text-cyan-300">
+                    <Sparkles className="w-4 h-4 text-cyan-400" />
+                    <span>Gid Konfigirasyon Rapid nan Supabase (Etap pa Etap)</span>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-xs">
+                    <div className="p-3.5 rounded-2xl bg-slate-950/90 border border-slate-800 space-y-1.5">
+                      <span className="w-6 h-6 rounded-full bg-[#1E90FF] text-white font-black text-xs flex items-center justify-center">
+                        1
+                      </span>
+                      <h4 className="font-extrabold text-white">Ale nan Supabase</h4>
+                      <p className="text-[11px] text-slate-400 leading-relaxed">
+                        Konekte sou <strong>supabase.com</strong> ➔ klike sou pwojè w la ➔ klike sou <strong>Authentication</strong> nan meni agoch la ➔ epi klike sou <strong>Email Templates</strong>.
+                      </p>
+                    </div>
+
+                    <div className="p-3.5 rounded-2xl bg-slate-950/90 border border-slate-800 space-y-1.5">
+                      <span className="w-6 h-6 rounded-full bg-cyan-500 text-black font-black text-xs flex items-center justify-center">
+                        2
+                      </span>
+                      <h4 className="font-extrabold text-white">Chwazi Modèl la</h4>
+                      <p className="text-[11px] text-slate-400 leading-relaxed">
+                        Klike sou <strong>{emailTemplateType === 'reset' ? 'Reset Password' : 'Confirm signup'}</strong>. Nan pati <em>Subject</em>, mete : <code className="text-cyan-300 font-mono font-bold block mt-1 bg-slate-900 p-1 rounded">{emailTemplateType === 'reset' ? `🔐 [${emailStoreName}] Réinitialisation de votre mot de passe` : `⚡ [${emailStoreName}] Confirmez votre compte`}</code>
+                      </p>
+                    </div>
+
+                    <div className="p-3.5 rounded-2xl bg-slate-950/90 border border-slate-800 space-y-1.5">
+                      <span className="w-6 h-6 rounded-full bg-emerald-500 text-black font-black text-xs flex items-center justify-center">
+                        3
+                      </span>
+                      <h4 className="font-extrabold text-white">Kole Kòd HTML la</h4>
+                      <p className="text-[11px] text-slate-400 leading-relaxed">
+                        Efase sa ki te nan pati <em>Body (HTML)</em> la, epi klike sou bouton <strong>"Kopye Kòd HTML Pèsonalize a"</strong> anba a pou w kole l, epi peze <strong>Save</strong>.
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Direct Action Buttons */}
+                  <div className="flex flex-wrap items-center justify-between gap-3 pt-2 border-t border-white/10">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        navigator.clipboard.writeText(currentGeneratedHtml);
+                        setHasCopiedTemplate(true);
+                        showToast(`Kòd HTML modèl ${emailTemplateType === 'reset' ? 'Reset Password' : 'Confirm Signup'} pèsonalize a kopye ! Ou mèt al kole l nan Supabase.`, 'success');
+                        setTimeout(() => setHasCopiedTemplate(false), 3500);
+                      }}
+                      className={`px-5 py-3 rounded-2xl font-black text-xs flex items-center gap-2 shadow-lg transition-all ${
+                        hasCopiedTemplate
+                          ? 'bg-emerald-500 text-black ring-2 ring-emerald-300 scale-105'
+                          : 'bg-gradient-to-r from-[#1E90FF] to-cyan-500 hover:from-blue-600 hover:to-cyan-600 text-white shadow-blue-500/30'
+                      }`}
+                    >
+                      {hasCopiedTemplate ? (
+                        <>
+                          <Check className="w-4 h-4" />
+                          <span>Kòd HTML Kopye nan Presse-papiers !</span>
+                        </>
+                      ) : (
+                        <>
+                          <Copy className="w-4 h-4" />
+                          <span>Kopye Kòd HTML Pèsonalize {emailTemplateType === 'reset' ? 'Reset Password' : 'Confirm Signup'}</span>
+                        </>
+                      )}
+                    </button>
+
+                    {/* Send Test Email Tool */}
+                    <div className="flex items-center gap-2 bg-slate-950 p-1.5 rounded-2xl border border-slate-800">
+                      <input
+                        type="email"
+                        placeholder="Email pou tès (ex: monemail@gmail.com)"
+                        value={testEmailInput}
+                        onChange={(e) => setTestEmailInput(e.target.value)}
+                        className="px-3 py-2 rounded-xl bg-slate-900 border border-slate-700 text-white text-xs font-mono placeholder-slate-500 focus:outline-none focus:border-[#1E90FF] min-w-[240px]"
+                      />
+                      <button
+                        type="button"
+                        disabled={isSendingTestEmail || !testEmailInput}
+                        onClick={async () => {
+                          if (!testEmailInput || !testEmailInput.includes('@')) {
+                            showToast('Tanpri mete yon bon adrès email pou w resevwa tès la.', 'error');
+                            return;
+                          }
+                          setIsSendingTestEmail(true);
+                          try {
+                            const res = await fetch('/api/auth/send-reset-email', {
+                              method: 'POST',
+                              headers: { 'Content-Type': 'application/json' },
+                              body: JSON.stringify({ email: testEmailInput.trim() })
+                            });
+                            const data = await res.json();
+                            if (res.ok) {
+                              showToast(data.message || `Email tès voye bay ${testEmailInput} !`, 'success');
+                            } else {
+                              showToast(data.error || 'Erreur lors de l\'envoi du test.', 'error');
+                            }
+                          } catch {
+                            showToast('Erreur de connexion au serveur.', 'error');
+                          } finally {
+                            setIsSendingTestEmail(false);
+                          }
+                        }}
+                        className="px-3.5 py-2 rounded-xl bg-cyan-600 hover:bg-cyan-500 text-white font-extrabold text-xs flex items-center gap-1.5 disabled:opacity-40 transition-all shadow-md"
+                      >
+                        {isSendingTestEmail ? (
+                          <>
+                            <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                            <span>Envoi...</span>
+                          </>
+                        ) : (
+                          <>
+                            <Send className="w-3.5 h-3.5" />
+                            <span>Voye Tès</span>
+                          </>
+                        )}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Visual Preview Device Toggle & Header */}
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <Eye className="w-4 h-4 text-cyan-400" />
+                      <span className="text-xs font-extrabold text-white">
+                        Aperçu vizyèl dirèk (Kijan kliyan an ap wè email la nan telefòn oswa òdinatè l) :
+                      </span>
+                    </div>
+
+                    <div className="flex items-center gap-1 bg-slate-950 p-1 rounded-xl border border-slate-800">
+                      <button
+                        type="button"
+                        onClick={() => setEmailDeviceView('desktop')}
+                        className={`px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5 transition-colors ${
+                          emailDeviceView === 'desktop'
+                            ? 'bg-[#1E90FF] text-white shadow-sm'
+                            : 'text-slate-400 hover:text-white'
+                        }`}
+                      >
+                        <Monitor className="w-3.5 h-3.5" />
+                        <span>Desktop</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setEmailDeviceView('mobile')}
+                        className={`px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5 transition-colors ${
+                          emailDeviceView === 'mobile'
+                            ? 'bg-[#1E90FF] text-white shadow-sm'
+                            : 'text-slate-400 hover:text-white'
+                        }`}
+                      >
+                        <Smartphone className="w-3.5 h-3.5" />
+                        <span>Mobile</span>
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Email Live Render Preview Frame */}
+                  <div className="p-4 sm:p-6 rounded-3xl bg-slate-950 border border-slate-800 flex justify-center items-center shadow-inner overflow-x-auto min-h-[500px]">
+                    <div
+                      className={`transition-all duration-300 rounded-2xl overflow-hidden border border-slate-700 shadow-2xl bg-[#0B0F19] ${
+                        emailDeviceView === 'mobile'
+                          ? 'w-full max-w-[390px] h-[640px]'
+                          : 'w-full max-w-[650px] h-[680px]'
+                      }`}
+                    >
+                      <iframe
+                        title="Email Preview"
+                        srcDoc={
+                          currentGeneratedHtml
+                            .replace(/\{\{\s*\.Email\s*\}\}/g, testEmailInput || 'emmanuelselicour.2002@gmail.com')
+                            .replace(/\{\{\s*\.ConfirmationURL\s*\}\}/g, '#')
+                            .replace(/\{\{\s*\.Token\s*\}\}/g, '784920')
+                        }
+                        className="w-full h-full border-0 bg-[#070B14]"
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                {/* Raw HTML Code Inspector */}
+                <div className="p-5 rounded-3xl bg-slate-950/90 border border-slate-800 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <Code className="w-4 h-4 text-amber-400" />
+                      <h3 className="text-xs font-extrabold text-slate-200">
+                        Kòd Sous HTML ({emailTemplateType === 'reset' ? 'Reset Password' : 'Confirm Signup'})
+                      </h3>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={() => {
+                        navigator.clipboard.writeText(currentGeneratedHtml);
+                        showToast('Kòd kopye !', 'success');
+                      }}
+                      className="px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white font-bold text-xs flex items-center gap-1.5 transition-colors border border-slate-700"
+                    >
+                      <Copy className="w-3.5 h-3.5" />
+                      <span>Kopye Kòd la</span>
+                    </button>
+                  </div>
+
+                  <div className="p-4 rounded-2xl bg-slate-900 font-mono text-[11px] text-cyan-300 max-h-56 overflow-y-auto whitespace-pre leading-relaxed border border-slate-800 select-all">
+                    {currentGeneratedHtml}
+                  </div>
+                </div>
+              </div>
+            );
+          })()}
 
         </div>
 

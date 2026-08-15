@@ -1,10 +1,10 @@
 import React, { useState } from 'react';
 import { useApp } from '../context/AppContext';
-import { User, Phone, Mail, Lock, X, ArrowRight, ShieldCheck, LogIn, UserPlus, ExternalLink, RefreshCw, CheckCircle2, AlertCircle } from 'lucide-react';
+import { User, Phone, Mail, Lock, X, ArrowRight, ShieldCheck, LogIn, UserPlus, ExternalLink, RefreshCw, CheckCircle2, AlertCircle, Eye, EyeOff, KeyRound } from 'lucide-react';
 
 export const AuthModal: React.FC = () => {
-  const { isAuthModalOpen, setIsAuthModalOpen, registerUser, loginUser, resendVerification } = useApp();
-  const [isLoginMode, setIsLoginMode] = useState(true);
+  const { isAuthModalOpen, setIsAuthModalOpen, registerUser, loginUser, resetPassword, sendResetEmail, resendVerification } = useApp();
+  const [authMode, setAuthMode] = useState<'login' | 'register' | 'reset'>('login');
   const [verificationPending, setVerificationPending] = useState<{
     email: string;
     name?: string;
@@ -17,18 +17,27 @@ export const AuthModal: React.FC = () => {
   const [phone, setPhone] = useState('');
   const [emailOrPhone, setEmailOrPhone] = useState('');
   const [password, setPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  
+  // Show / Hide Password Toggles
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isResending, setIsResending] = useState(false);
+  const [isSendingResetEmailState, setIsSendingResetEmailState] = useState(false);
   const [authError, setAuthError] = useState<string | null>(null);
+  const [resetSuccessMessage, setResetSuccessMessage] = useState<string | null>(null);
 
   if (!isAuthModalOpen) return null;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setAuthError(null);
+    setResetSuccessMessage(null);
     setIsSubmitting(true);
 
-    if (isLoginMode) {
+    if (authMode === 'login') {
       if (!emailOrPhone || !password) {
         setAuthError('Veuillez renseigner votre email/téléphone et votre mot de passe.');
         setIsSubmitting(false);
@@ -49,7 +58,7 @@ export const AuthModal: React.FC = () => {
       } else {
         setAuthError(res.message || 'Mot de passe ou email incorrect. Si vous n\'avez pas de compte, veuillez en créer un.');
       }
-    } else {
+    } else if (authMode === 'register') {
       if (!name || !email || !phone || !password) {
         setAuthError('Tous les champs y compris le mot de passe sont obligatoires.');
         setIsSubmitting(false);
@@ -75,6 +84,33 @@ export const AuthModal: React.FC = () => {
       } else {
         setAuthError(res.message || 'Erreur lors de la création du compte.');
       }
+    } else if (authMode === 'reset') {
+      if (!emailOrPhone) {
+        setAuthError('Veuillez saisir votre adresse email ou numéro de téléphone.');
+        setIsSubmitting(false);
+        return;
+      }
+      if (!password || password.length < 4) {
+        setAuthError('Le nouveau mot de passe doit contenir au moins 4 caractères.');
+        setIsSubmitting(false);
+        return;
+      }
+      if (password !== confirmPassword) {
+        setAuthError('Les deux mots de passe ne correspondent pas.');
+        setIsSubmitting(false);
+        return;
+      }
+
+      const res = await resetPassword(emailOrPhone, password);
+      setIsSubmitting(false);
+      if (res.success) {
+        setResetSuccessMessage(res.message || 'Mot de passe mis à jour avec succès ! Vous pouvez maintenant vous connecter.');
+        setAuthError(null);
+        setPassword('');
+        setConfirmPassword('');
+      } else {
+        setAuthError(res.message || 'Erreur lors de la réinitialisation du mot de passe.');
+      }
     }
   };
 
@@ -91,7 +127,7 @@ export const AuthModal: React.FC = () => {
 
   const handleResetToLogin = () => {
     setVerificationPending(null);
-    setIsLoginMode(true);
+    setAuthMode('login');
     if (verificationPending?.email) {
       setEmailOrPhone(verificationPending.email);
     }
@@ -124,7 +160,6 @@ export const AuthModal: React.FC = () => {
                   alt="FRAYZEN SHOP"
                   className="w-16 h-16 rounded-2xl object-cover border border-[#1E90FF]/40 shadow-lg mx-auto"
                   onError={(e) => {
-                    // Fallback to icon if image fails
                     e.currentTarget.style.display = 'none';
                   }}
                 />
@@ -226,58 +261,111 @@ export const AuthModal: React.FC = () => {
           </div>
         ) : (
           /* ================================================================= */
-          /* STANDARD LOGIN / REGISTER FORM                                    */
+          /* STANDARD LOGIN / REGISTER / RESET FORM                            */
           /* ================================================================= */
           <>
             <div className="text-center space-y-2">
               <div className="w-12 h-12 mx-auto rounded-2xl bg-[#1E90FF] p-0.5 shadow-md">
                 <div className="w-full h-full bg-slate-900 rounded-[14px] flex items-center justify-center">
-                  <ShieldCheck className="w-6 h-6 text-[#1E90FF]" />
+                  {authMode === 'reset' ? (
+                    <KeyRound className="w-6 h-6 text-amber-400" />
+                  ) : (
+                    <ShieldCheck className="w-6 h-6 text-[#1E90FF]" />
+                  )}
                 </div>
               </div>
               <h3 className="text-2xl font-black text-white">
-                {isLoginMode ? 'Connexion à votre compte' : 'Créer un compte FRAYZEN'}
+                {authMode === 'login' && 'Connexion à votre compte'}
+                {authMode === 'register' && 'Créer un compte FRAYZEN'}
+                {authMode === 'reset' && 'Réinitialiser le mot de passe'}
               </h3>
               <p className="text-xs text-slate-400">
-                {isLoginMode
-                  ? 'Saisissez vos identifiants pour vous connecter et accéder à votre solde.'
-                  : 'Créez un compte FRAYZEN SHOP pour recharger votre solde NATCASH / MonCash.'}
+                {authMode === 'login' && 'Saisissez vos identifiants pour vous connecter et accéder à votre solde.'}
+                {authMode === 'register' && 'Créez un compte FRAYZEN SHOP pour recharger votre solde NATCASH / MonCash.'}
+                {authMode === 'reset' && 'Entrez votre email ou téléphone et définissez un nouveau mot de passe.'}
               </p>
             </div>
 
-            {/* Tab Selector: Connexion vs Inscription */}
-            <div className="grid grid-cols-2 p-1 rounded-2xl bg-slate-900 border border-slate-800 text-xs font-bold">
-              <button
-                type="button"
-                onClick={() => {
-                  setIsLoginMode(true);
-                  setAuthError(null);
-                }}
-                className={`py-2 rounded-xl flex items-center justify-center gap-2 transition-all ${
-                  isLoginMode
-                    ? 'bg-[#1E90FF] text-white shadow-md'
-                    : 'text-slate-400 hover:text-white'
-                }`}
-              >
-                <LogIn className="w-3.5 h-3.5" />
-                Connexion
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  setIsLoginMode(false);
-                  setAuthError(null);
-                }}
-                className={`py-2 rounded-xl flex items-center justify-center gap-2 transition-all ${
-                  !isLoginMode
-                    ? 'bg-[#1E90FF] text-white shadow-md'
-                    : 'text-slate-400 hover:text-white'
-                }`}
-              >
-                <UserPlus className="w-3.5 h-3.5" />
-                Inscription
-              </button>
-            </div>
+            {/* Tab Selector: Connexion vs Inscription (Only when not in Reset mode) */}
+            {authMode !== 'reset' && (
+              <div className="grid grid-cols-2 p-1 rounded-2xl bg-slate-900 border border-slate-800 text-xs font-bold">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setAuthMode('login');
+                    setAuthError(null);
+                    setResetSuccessMessage(null);
+                  }}
+                  className={`py-2 rounded-xl flex items-center justify-center gap-2 transition-all ${
+                    authMode === 'login'
+                      ? 'bg-[#1E90FF] text-white shadow-md'
+                      : 'text-slate-400 hover:text-white'
+                  }`}
+                >
+                  <LogIn className="w-3.5 h-3.5" />
+                  Connexion
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setAuthMode('register');
+                    setAuthError(null);
+                    setResetSuccessMessage(null);
+                  }}
+                  className={`py-2 rounded-xl flex items-center justify-center gap-2 transition-all ${
+                    authMode === 'register'
+                      ? 'bg-[#1E90FF] text-white shadow-md'
+                      : 'text-slate-400 hover:text-white'
+                  }`}
+                >
+                  <UserPlus className="w-3.5 h-3.5" />
+                  Inscription
+                </button>
+              </div>
+            )}
+
+            {/* Reset Mode Banner indicator */}
+            {authMode === 'reset' && (
+              <div className="flex items-center justify-between px-3.5 py-2 rounded-xl bg-amber-500/15 border border-amber-500/30 text-xs text-amber-300">
+                <div className="flex items-center gap-2 font-bold">
+                  <KeyRound className="w-4 h-4 text-amber-400 shrink-0" />
+                  <span>Mode Réinitialisation</span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setAuthMode('login');
+                    setAuthError(null);
+                    setResetSuccessMessage(null);
+                  }}
+                  className="text-[11px] font-bold text-white hover:text-amber-200 underline"
+                >
+                  ← Retour Connexion
+                </button>
+              </div>
+            )}
+
+            {/* Success Message Banner (for Reset Password) */}
+            {resetSuccessMessage && (
+              <div className="p-3.5 rounded-2xl bg-emerald-950/60 border border-emerald-500/40 text-xs space-y-2 animate-in fade-in duration-200">
+                <div className="flex items-start gap-2 text-emerald-200">
+                  <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
+                  <p className="font-semibold leading-relaxed">{resetSuccessMessage}</p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setAuthMode('login');
+                    setResetSuccessMessage(null);
+                    setAuthError(null);
+                  }}
+                  className="w-full py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs shadow transition-all flex items-center justify-center gap-1.5"
+                >
+                  <LogIn className="w-3.5 h-3.5" />
+                  Se connecter maintenant avec le nouveau mot de passe
+                </button>
+              </div>
+            )}
 
             {/* Error Message Banner */}
             {authError && (
@@ -286,23 +374,35 @@ export const AuthModal: React.FC = () => {
                   <AlertCircle className="w-4 h-4 text-red-400 shrink-0 mt-0.5" />
                   <p className="font-semibold leading-relaxed">{authError}</p>
                 </div>
-                {isLoginMode && (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setIsLoginMode(false);
-                      setAuthError(null);
-                    }}
-                    className="text-[11px] font-bold text-amber-300 hover:text-amber-200 underline block"
-                  >
-                    👉 Vous n'avez pas de compte ? Cliquez ici pour en créer un
-                  </button>
+                {authMode === 'login' && (
+                  <div className="flex flex-wrap items-center gap-3 pt-1 border-t border-red-500/20 text-[11px]">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setAuthMode('register');
+                        setAuthError(null);
+                      }}
+                      className="font-bold text-amber-300 hover:text-amber-200 underline"
+                    >
+                      👉 Créer un compte
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setAuthMode('reset');
+                        setAuthError(null);
+                      }}
+                      className="font-bold text-blue-300 hover:text-blue-200 underline"
+                    >
+                      🔑 Mot de passe oublié ?
+                    </button>
+                  </div>
                 )}
               </div>
             )}
 
             <form onSubmit={handleSubmit} className="space-y-4">
-              {isLoginMode ? (
+              {authMode === 'login' ? (
                 /* LOGIN FORM */
                 <>
                   <div className="space-y-1">
@@ -323,24 +423,49 @@ export const AuthModal: React.FC = () => {
                   </div>
 
                   <div className="space-y-1">
-                    <label htmlFor="login-password" className="text-xs font-bold text-slate-300">Mot de passe</label>
+                    <div className="flex items-center justify-between">
+                      <label htmlFor="login-password" className="text-xs font-bold text-slate-300">Mot de passe</label>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setAuthMode('reset');
+                          setAuthError(null);
+                          setResetSuccessMessage(null);
+                        }}
+                        className="text-[11px] font-bold text-[#1E90FF] hover:underline"
+                      >
+                        Mot de passe oublié ?
+                      </button>
+                    </div>
                     <div className="relative">
                       <Lock className="absolute left-3 top-3 w-4 h-4 text-slate-400" />
                       <input
                         id="login-password"
                         name="password"
-                        type="password"
+                        type={showPassword ? 'text' : 'password'}
                         required
                         minLength={4}
                         placeholder="••••••••"
                         value={password}
                         onChange={e => setPassword(e.target.value)}
-                        className="w-full pl-10 pr-4 py-2.5 rounded-xl glass-input text-sm text-white placeholder-slate-500"
+                        className="w-full pl-10 pr-11 py-2.5 rounded-xl glass-input text-sm text-white placeholder-slate-500"
                       />
+                      <button
+                        type="button"
+                        onClick={() => setShowPassword(!showPassword)}
+                        className="absolute right-3 top-2.5 text-slate-400 hover:text-white p-1 rounded-lg transition-colors"
+                        title={showPassword ? 'Masquer le mot de passe' : 'Afficher le mot de passe'}
+                      >
+                        {showPassword ? (
+                          <EyeOff className="w-4 h-4 text-[#1E90FF]" />
+                        ) : (
+                          <Eye className="w-4 h-4" />
+                        )}
+                      </button>
                     </div>
                   </div>
                 </>
-              ) : (
+              ) : authMode === 'register' ? (
                 /* INSCRIPTION FORM */
                 <>
                   <div className="space-y-1">
@@ -401,14 +526,106 @@ export const AuthModal: React.FC = () => {
                       <input
                         id="register-password"
                         name="password"
-                        type="password"
+                        type={showPassword ? 'text' : 'password'}
                         required
                         minLength={4}
                         placeholder="Créez votre mot de passe (min. 4 caractères)"
                         value={password}
                         onChange={e => setPassword(e.target.value)}
+                        className="w-full pl-10 pr-11 py-2.5 rounded-xl glass-input text-sm text-white placeholder-slate-500"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowPassword(!showPassword)}
+                        className="absolute right-3 top-2.5 text-slate-400 hover:text-white p-1 rounded-lg transition-colors"
+                        title={showPassword ? 'Masquer le mot de passe' : 'Afficher le mot de passe'}
+                      >
+                        {showPassword ? (
+                          <EyeOff className="w-4 h-4 text-[#1E90FF]" />
+                        ) : (
+                          <Eye className="w-4 h-4" />
+                        )}
+                      </button>
+                    </div>
+                  </div>
+                </>
+              ) : (
+                /* RESET PASSWORD FORM */
+                <>
+                  <div className="space-y-1">
+                    <label htmlFor="reset-email-phone" className="text-xs font-bold text-slate-300">Votre Adresse Email ou Téléphone</label>
+                    <div className="relative">
+                      <Mail className="absolute left-3 top-3 w-4 h-4 text-slate-400" />
+                      <input
+                        id="reset-email-phone"
+                        name="emailOrPhone"
+                        type="text"
+                        required
+                        placeholder="Ex: jean.marc@gmail.com ou 50937882211"
+                        value={emailOrPhone}
+                        onChange={e => setEmailOrPhone(e.target.value)}
                         className="w-full pl-10 pr-4 py-2.5 rounded-xl glass-input text-sm text-white placeholder-slate-500"
                       />
+                    </div>
+                  </div>
+
+                  <div className="space-y-1">
+                    <label htmlFor="reset-new-password" className="text-xs font-bold text-slate-300">Nouveau Mot de passe</label>
+                    <div className="relative">
+                      <Lock className="absolute left-3 top-3 w-4 h-4 text-slate-400" />
+                      <input
+                        id="reset-new-password"
+                        name="password"
+                        type={showPassword ? 'text' : 'password'}
+                        required
+                        minLength={4}
+                        placeholder="Nouveau mot de passe (min. 4 caractères)"
+                        value={password}
+                        onChange={e => setPassword(e.target.value)}
+                        className="w-full pl-10 pr-11 py-2.5 rounded-xl glass-input text-sm text-white placeholder-slate-500"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowPassword(!showPassword)}
+                        className="absolute right-3 top-2.5 text-slate-400 hover:text-white p-1 rounded-lg transition-colors"
+                        title={showPassword ? 'Masquer le mot de passe' : 'Afficher le mot de passe'}
+                      >
+                        {showPassword ? (
+                          <EyeOff className="w-4 h-4 text-amber-400" />
+                        ) : (
+                          <Eye className="w-4 h-4" />
+                        )}
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="space-y-1">
+                    <label htmlFor="reset-confirm-password" className="text-xs font-bold text-slate-300">Confirmer le Nouveau Mot de passe</label>
+                    <div className="relative">
+                      <Lock className="absolute left-3 top-3 w-4 h-4 text-slate-400" />
+                      <input
+                        id="reset-confirm-password"
+                        name="confirmPassword"
+                        type={showConfirmPassword ? 'text' : 'password'}
+                        required
+                        minLength={4}
+                        placeholder="Répétez le nouveau mot de passe"
+                        value={confirmPassword}
+                        onChange={e => setConfirmPassword(e.target.value)}
+                        className="w-full pl-10 pr-11 py-2.5 rounded-xl glass-input text-sm text-white placeholder-slate-500"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                        className="absolute right-3 top-2.5 text-slate-400 hover:text-white p-1 rounded-lg transition-colors"
+                        title={showConfirmPassword ? 'Masquer le mot de passe' : 'Afficher le mot de passe'}
+                      >
+                        {showConfirmPassword ? (
+                          <EyeOff className="w-4 h-4 text-amber-400" />
+                        ) : (
+                          <Eye className="w-4 h-4" />
+                        )}
+                      </button>
                     </div>
                   </div>
                 </>
@@ -417,20 +634,79 @@ export const AuthModal: React.FC = () => {
               <button
                 type="submit"
                 disabled={isSubmitting}
-                className="w-full py-3.5 px-4 rounded-xl bg-[#1E90FF] hover:bg-blue-600 text-white font-extrabold text-sm flex items-center justify-center gap-2 shadow-md transition-all disabled:opacity-50"
+                className="w-full py-3.5 px-4 rounded-xl bg-[#1E90FF] hover:bg-blue-600 active:scale-98 text-white font-extrabold text-sm flex items-center justify-center gap-2 shadow-md transition-all disabled:opacity-50"
               >
                 {isSubmitting ? (
-                  'Vérification...'
-                ) : isLoginMode ? (
+                  'Traitement...'
+                ) : authMode === 'login' ? (
                   <>
                     Se connecter <ArrowRight className="w-4 h-4" />
                   </>
-                ) : (
+                ) : authMode === 'register' ? (
                   <>
                     S'inscrire et continuer <ArrowRight className="w-4 h-4" />
                   </>
+                ) : (
+                  <>
+                    <KeyRound className="w-4 h-4" />
+                    Réinitialiser mon mot de passe
+                  </>
                 )}
               </button>
+
+              {authMode === 'reset' && (
+                <div className="space-y-2 pt-1 border-t border-slate-800">
+                  <button
+                    type="button"
+                    disabled={isSendingResetEmailState || !emailOrPhone}
+                    onClick={async () => {
+                      if (!emailOrPhone) {
+                        setAuthError('Veuillez d\'abord saisir votre adresse email ci-dessus.');
+                        return;
+                      }
+                      if (!emailOrPhone.includes('@')) {
+                        setAuthError('Veuillez renseigner une adresse email valide pour recevoir le lien.');
+                        return;
+                      }
+                      setIsSendingResetEmailState(true);
+                      setAuthError(null);
+                      setResetSuccessMessage(null);
+                      const res = await sendResetEmail(emailOrPhone);
+                      setIsSendingResetEmailState(false);
+                      if (res.success) {
+                        setResetSuccessMessage(`Un email personnalisé FRAYZEN SHOP a été envoyé à ${emailOrPhone}. Vérifiez votre boîte de réception ou spam.`);
+                      } else {
+                        setAuthError(res.message || 'Erreur lors de l\'envoi de l\'email.');
+                      }
+                    }}
+                    className="w-full py-2.5 px-3 rounded-xl bg-slate-900 hover:bg-slate-800 border border-slate-700 text-xs font-bold text-slate-300 hover:text-white flex items-center justify-center gap-2 transition-all disabled:opacity-40"
+                  >
+                    {isSendingResetEmailState ? (
+                      <>
+                        <RefreshCw className="w-3.5 h-3.5 animate-spin text-[#1E90FF]" /> Envoi de l'email...
+                      </>
+                    ) : (
+                      <>
+                        <Mail className="w-3.5 h-3.5 text-[#1E90FF]" /> M'envoyer le lien par Email personnalisé
+                      </>
+                    )}
+                  </button>
+
+                  <div className="text-center">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setAuthMode('login');
+                        setAuthError(null);
+                        setResetSuccessMessage(null);
+                      }}
+                      className="text-xs font-semibold text-slate-400 hover:text-white underline transition-colors"
+                    >
+                      ← Annuler et retourner à la connexion
+                    </button>
+                  </div>
+                </div>
+              )}
             </form>
 
             <p className="text-[10px] text-center text-slate-400">
@@ -442,3 +718,4 @@ export const AuthModal: React.FC = () => {
     </div>
   );
 };
+

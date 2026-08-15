@@ -27,10 +27,17 @@ import {
   hashUserPassword,
   verifyUserPassword,
   resendVerificationEmail,
+  resetUserPasswordInSupabase,
+  sendPasswordResetEmail,
   supabaseAdmin,
   isSupabaseServerConfigured,
   toUuid
 } from './server/supabaseService';
+import {
+  SUPABASE_RESET_PASSWORD_TEMPLATE_HTML,
+  SUPABASE_CONFIRM_SIGNUP_TEMPLATE_HTML,
+  renderEmailPreview
+} from './server/emailTemplates';
 
 const app = express();
 const PORT = 3000;
@@ -759,6 +766,109 @@ app.post('/api/auth/verify-email', async (req, res) => {
     console.error('Error in /api/auth/verify-email:', err);
     res.status(500).json({ error: err?.message || 'Erreur lors de la vérification de l\'email.' });
   }
+});
+
+app.post('/api/auth/reset-password', async (req, res) => {
+  try {
+    const { emailOrPhone, newPassword } = req.body || {};
+    if (!emailOrPhone) {
+      return res.status(400).json({ error: 'Veuillez renseigner votre adresse email ou numéro de téléphone.' });
+    }
+    if (!newPassword || String(newPassword).trim().length < 4) {
+      return res.status(400).json({ error: 'Le nouveau mot de passe doit contenir au moins 4 caractères.' });
+    }
+
+    const query = String(emailOrPhone).toLowerCase().trim();
+    const cleanPassword = String(newPassword).trim();
+    const allUsers = await fetchUsersFromSupabase(users);
+    let targetUser = allUsers.find(u => u.email.toLowerCase() === query || (u.phone && u.phone.toLowerCase() === query));
+
+    if (!targetUser) {
+      return res.status(404).json({ error: 'Aucun compte trouvé avec cet email ou numéro. Veuillez créer un compte.' });
+    }
+
+    // Hash the new password
+    const hashed = hashUserPassword(cleanPassword);
+    targetUser.passwordHash = hashed;
+    targetUser.password = hashed;
+
+    const uIdx = users.findIndex(u => u.email.toLowerCase() === targetUser?.email.toLowerCase());
+    if (uIdx !== -1) {
+      users[uIdx].passwordHash = hashed;
+      users[uIdx].password = hashed;
+    }
+    saveDataStore();
+
+    // Sync to Supabase Auth & DB
+    try {
+      await resetUserPasswordInSupabase(targetUser.email, cleanPassword);
+      await syncUserToSupabase(targetUser);
+    } catch (sbErr) {
+      console.warn('[Supabase password reset warning]:', sbErr);
+    }
+
+    return res.json({
+      success: true,
+      message: 'Mot de passe réinitialisé avec succès ! Vous pouvez maintenant vous connecter avec votre nouveau mot de passe.',
+      user: targetUser
+    });
+  } catch (err: any) {
+    console.error('Error in /api/auth/reset-password:', err);
+    return res.status(500).json({ error: err?.message || 'Erreur lors de la réinitialisation du mot de passe.' });
+  }
+});
+
+// Route to trigger official Supabase Password Reset Email
+app.post('/api/auth/send-reset-email', async (req, res) => {
+  try {
+    const { email } = req.body || {};
+    if (!email) {
+      return res.status(400).json({ error: 'Veuillez saisir votre adresse email.' });
+    }
+    const targetEmail = String(email).toLowerCase().trim();
+    const result = await sendPasswordResetEmail(targetEmail);
+    if (!result.success) {
+      return res.status(400).json({ error: result.error || 'Erreur lors de l\'envoi de l\'email.' });
+    }
+    return res.json({
+      success: true,
+      message: `Un email de réinitialisation sécurisé avec les couleurs de FRAYZEN SHOP a été envoyé à ${targetEmail}.`
+    });
+  } catch (err: any) {
+    console.error('Error in /api/auth/send-reset-email:', err);
+    return res.status(500).json({ error: err?.message || 'Erreur lors de l\'envoi.' });
+  }
+});
+
+// Route to get customized Supabase email templates
+app.get('/api/admin/email-templates', async (req, res) => {
+  try {
+    res.json({
+      resetPassword: {
+        title: '🔐 Réinitialisation de mot de passe (Reset Password)',
+        subject: '🔐 [FRAYZEN SHOP] Réinitialisation de votre mot de passe',
+        supabaseLocation: 'Supabase Dashboard > Authentication > Email Templates > Reset Password',
+        htmlCode: SUPABASE_RESET_PASSWORD_TEMPLATE_HTML
+      },
+      confirmSignup: {
+        title: '✅ Confirmation d\'inscription (Confirm signup)',
+        subject: '⚡ [FRAYZEN SHOP] Confirmez votre adresse email',
+        supabaseLocation: 'Supabase Dashboard > Authentication > Email Templates > Confirm signup',
+        htmlCode: SUPABASE_CONFIRM_SIGNUP_TEMPLATE_HTML
+      }
+    });
+  } catch (err: any) {
+    res.status(500).json({ error: 'Erreur templates' });
+  }
+});
+
+// Route to render HTML email preview live in browser / iframe
+app.get('/api/admin/email-templates/preview/:type', (req, res) => {
+  const type = req.params.type === 'confirm' ? 'confirm' : 'reset';
+  const email = (req.query.email as string) || 'emmanuelselicour.2002@gmail.com';
+  const html = renderEmailPreview(type, email);
+  res.setHeader('Content-Type', 'text/html; charset=utf-8');
+  res.send(html);
 });
 
 app.get('/api/user/profile/:email', async (req, res) => {
